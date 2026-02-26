@@ -1,0 +1,144 @@
+{
+  "countries": [
+    {
+      "code": "CHN",
+      "name": "China",
+      "imports_billions": 427,
+      "import_share": 0.1676,
+      "sectors": ["334", "335", "333"]
+    },
+    {
+      "code": "MEX",
+      "name": "Mexico",
+      "imports_billions": 466,
+      "import_share": 0.183,
+      "sectors": ["3361MV", "334", "311FT"]
+    },
+    {
+      "code": "CAN",
+      "name": "Canada",
+      "imports_billions": 410,
+      "import_share": 0.161,
+      "sectors": ["211", "324", "321"]
+    },
+    {
+      "code": "DEU",
+      "name": "Germany",
+      "imports_billions": 160,
+      "import_share": 0.0628,
+      "sectors": ["3361MV", "334", "325"]
+    },
+    {
+      "code": "JPN",
+      "name": "Japan",
+      "imports_billions": 148,
+      "import_share": 0.0581,
+      "sectors": ["3361MV", "333", "334"]
+    },
+    {
+      "code": "KOR",
+      "name": "South Korea",
+      "imports_billions": 115,
+      "import_share": 0.0452,
+      "sectors": ["334", "3361MV", "325"]
+    },
+    {
+      "code": "VNM",
+      "name": "Vietnam",
+      "imports_billions": 114,
+      "import_share": 0.0448,
+      "sectors": ["315AL", "334", "311FT"]
+    },
+    {
+      "code": "TWN",
+      "name": "Taiwan",
+      "imports_billions": 77,
+      "import_share": 0.0302,
+      "sectors": ["334", "335", "333"]
+    },
+    {
+      "code": "IND",
+      "name": "India",
+      "imports_billions": 87,
+      "import_share": 0.0342,
+      "sectors": ["325", "334", "331"]
+    },
+    {
+      "code": "IRL",
+      "name": "Ireland",
+      "imports_billions": 83,
+      "import_share": 0.0326,
+      "sectors": ["325", "334", "311FT"]
+    },
+    {
+      "code": "ITA",
+      "name": "Italy",
+      "imports_billions": 67,
+      "import_share": 0.0263,
+      "sectors": ["3361MV", "333", "325"]
+    },
+    {
+      "code": "GBR",
+      "name": "United Kingdom",
+      "imports_billions": 65,
+      "import_share": 0.0255,
+      "sectors": ["3364OT", "325", "333"]
+    },
+    {
+      "code": "THA",
+      "name": "Thailand",
+      "imports_billions": 53,
+      "import_share": 0.0208,
+      "sectors": ["334", "333", "326"]
+    },
+    {
+      "code": "FRA",
+      "name": "France",
+      "imports_billions": 56,
+      "import_share": 0.022,
+      "sectors": ["3364OT", "325", "311FT"]
+    },
+    {
+      "code": "MYS",
+      "name": "Malaysia",
+      "imports_billions": 47,
+      "import_share": 0.0185,
+      "sectors": ["334", "335", "326"]
+    },
+    {
+      "code": "CHE",
+      "name": "Switzerland",
+      "imports_billions": 48,
+      "import_share": 0.0188,
+      "sectors": ["325", "334", "339"]
+    },
+    {
+      "code": "BRA",
+      "name": "Brazil",
+      "imports_billions": 40,
+      "import_share": 0.0157,
+      "sectors": ["324", "331", "311FT"]
+    },
+    {
+      "code": "IDN",
+      "name": "Indonesia",
+      "imports_billions": 32,
+      "import_share": 0.0126,
+      "sectors": ["315AL", "321", "324"]
+    },
+    {
+      "code": "ISR",
+      "name": "Israel",
+      "imports_billions": 27,
+      "import_share": 0.0106,
+      "sectors": ["334", "325", "339"]
+    },
+    {
+      "code": "SAU",
+      "name": "Saudi Arabia",
+      "imports_billions": 25,
+      "import_share": 0.0098,
+      "sectors": ["324", "325", "211"]
+    }
+  ]
+}

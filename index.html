@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>US Input-Output Economy | Forces of Production</title>
+  <link rel="stylesheet" href="css/style.css">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+      "troika-three-text": "https://cdn.jsdelivr.net/npm/troika-three-text@0.52.3/dist/troika-three-text.esm.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Three.js canvas -->
+  <div id="canvas-container"></div>
+
+  <!-- Scanline overlay -->
+  <div id="scanlines"></div>
+
+  <!-- HUD: branding -->
+  <div id="hud-top-left">
+    <img src="assets/fop-logo.png" alt="FoP" id="hud-logo">
+    <div id="hud-title">FORCES OF PRODUCTION</div>
+    <div id="hud-subtitle">US Input-Output Economy</div>
+  </div>
+
+  <!-- HUD: legend -->
+  <div id="hud-legend">
+    <div class="legend-title">SECTOR COLOR</div>
+    <div class="legend-gradient">
+      <div class="legend-bar"></div>
+      <div class="legend-labels">
+        <span>Declining IP</span>
+        <span>Neutral</span>
+        <span>Growing IP</span>
+      </div>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot dot-size-large"></span>
+      <span>Larger GDP share</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot dot-size-small"></span>
+      <span>Smaller GDP share</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot dot-jagged"></span>
+      <span>Higher PPI inflation</span>
+    </div>
+    <div class="legend-divider"></div>
+    <div class="legend-item">
+      <span class="legend-dot dot-trade"></span>
+      <span>Trade partner</span>
+    </div>
+    <div class="legend-hint">Y-axis = Upstreamness</div>
+  </div>
+
+  <!-- HUD: info panel (slide-in from right) -->
+  <div id="info-panel" class="hidden">
+    <button id="info-close">&times;</button>
+    <div id="info-name"></div>
+    <div id="info-code"></div>
+    <div id="info-stats">
+      <div class="stat-row">
+        <span class="stat-label">GDP Value Added</span>
+        <span class="stat-value" id="stat-gdp"></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">GDP Share</span>
+        <span class="stat-value" id="stat-gdp-share"></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">IP Growth (YoY)</span>
+        <span class="stat-value" id="stat-ip"></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">PPI Inflation (YoY)</span>
+        <span class="stat-value" id="stat-ppi"></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Upstreamness</span>
+        <span class="stat-value" id="stat-upstream"></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Import Intensity</span>
+        <span class="stat-value" id="stat-imports"></span>
+      </div>
+    </div>
+    <div id="info-connections">
+      <div class="conn-section">
+        <div class="conn-title">TOP SUPPLIERS</div>
+        <div id="conn-suppliers"></div>
+      </div>
+      <div class="conn-section">
+        <div class="conn-title">TOP CUSTOMERS</div>
+        <div id="conn-customers"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD: controls hint -->
+  <div id="hud-controls">
+    <span>Orbit: drag</span>
+    <span>Zoom: scroll</span>
+    <span>Select: click</span>
+    <span>Reset: Esc</span>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading-screen">
+    <div id="loading-text">INITIALIZING PRODUCTION MATRIX</div>
+    <div id="loading-bar"><div id="loading-fill"></div></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
