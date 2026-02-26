@@ -92,7 +92,7 @@ html, body {
 
 /* --- Minimap --- */
 #minimap-container {
-  position: fixed; top: 20px; right: 24px; z-index: 10;
+  position: fixed; bottom: 24px; right: 24px; z-index: 10;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 6px; padding: 8px 8px 6px 8px;
