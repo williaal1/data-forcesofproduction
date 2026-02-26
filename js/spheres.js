@@ -76,7 +76,7 @@ export function createSpheres(scene, sectors) {
       },
       wireframe: true,
       transparent: true,
-      depthWrite: false,
+      depthWrite: true,
     });
 
     const mesh = new THREE.Mesh(geometry, material);

@@ -12,18 +12,20 @@ export const sphereFragmentShader = /* glsl */ `
   varying float vDisplacement;
 
   void main() {
-    // Rim lighting: brighter at edges (Fresnel-like effect)
+    // Subtle rim lighting (Fresnel)
     vec3 viewDir = normalize(cameraPosition - vPosition);
     float rim = 1.0 - max(dot(viewDir, vNormal), 0.0);
-    rim = pow(rim, 2.0) * 0.5;
+    rim = pow(rim, 3.0) * 0.15;
 
-    // Displacement adds brightness variation
-    float dispBright = abs(vDisplacement) * 2.0;
+    // Very subtle displacement brightness
+    float dispBright = abs(vDisplacement) * 0.05;
 
     // Selection highlight
-    float selectionGlow = uSelected * 0.4;
+    float selectionGlow = uSelected * 0.25;
 
-    vec3 finalColor = uColor + rim * 0.3 + dispBright * 0.1 + selectionGlow;
+    // Keep output in a controlled range so bloom doesn't blow it out
+    vec3 finalColor = uColor * 0.85 + rim + dispBright + selectionGlow;
+    finalColor = min(finalColor, vec3(1.0));
 
     gl_FragColor = vec4(finalColor, uOpacity);
   }

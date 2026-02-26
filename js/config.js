@@ -36,43 +36,43 @@ export const IP_COLOR_STOPS = [
 
 // Scene parameters
 export const SCENE = {
-  cameraPosition: [0, 25, 55],
-  cameraTarget: [0, 15, 0],
-  fogNear: 60,
-  fogFar: 140,
-  bloomStrength: 1.5,
-  bloomRadius: 0.4,
-  bloomThreshold: 0.0,
+  cameraPosition: [0, 25, 65],
+  cameraTarget: [0, 12, 0],
+  fogNear: 100,
+  fogFar: 200,
+  bloomStrength: 0.35,
+  bloomRadius: 0.3,
+  bloomThreshold: 0.6,
   gridSize: 100,
   gridDivisions: 40,
   starCount: 2000,
   starSpread: 120,
-  ambientIntensity: 0.3,
-  pointLightIntensity: 0.8,
+  ambientIntensity: 0.15,
+  pointLightIntensity: 0.4,
   pointLightPosition: [20, 50, 30],
 };
 
 // Sphere parameters
 export const SPHERES = {
-  minRadius: 0.3,
-  maxRadius: 3.0,
+  minRadius: 0.5,
+  maxRadius: 3.5,
   icosaDetail: 2,           // ~80 faces — Battlezone aesthetic
-  upstreamnessScale: 8.0,   // Y-axis multiplier
-  upstreamnessOffset: 2.0,  // Y-axis base offset
+  upstreamnessScale: 7.0,   // Y-axis multiplier
+  upstreamnessOffset: 1.0,  // Y-axis base offset
   emissiveIntensity: 0.3,
-  wireframeOpacity: 0.9,
+  wireframeOpacity: 0.95,
 };
 
 // Flow parameters
 export const FLOWS = {
-  minLineWidth: 0.5,
-  maxLineWidth: 3.0,
-  minOpacity: 0.1,
-  maxOpacity: 0.6,
-  curveLift: 0.15,         // midpoint lift factor
-  dashSize: 0.5,
-  gapSize: 0.3,
-  animationSpeed: 0.003,
+  minLineWidth: 1.0,
+  maxLineWidth: 4.0,
+  minOpacity: 0.15,
+  maxOpacity: 0.7,
+  curveLift: 0.2,          // midpoint lift factor
+  dashSize: 0.8,
+  gapSize: 0.4,
+  animationSpeed: 0.004,
 };
 
 // Layout (d3-force-3d)
@@ -86,19 +86,19 @@ export const LAYOUT = {
 
 // Trade shell
 export const TRADE = {
-  hemisphereRadius: 60,
-  minCountryRadius: 0.4,
-  maxCountryRadius: 2.0,
-  connectionOpacity: 0.15,
+  hemisphereRadius: 55,
+  minCountryRadius: 0.6,
+  maxCountryRadius: 2.5,
+  connectionOpacity: 0.25,
   icosaDetail: 1,
 };
 
 // Labels
 export const LABELS = {
-  fontSize: 0.4,
-  nearDistance: 15,         // full opacity distance
-  farDistance: 50,          // zero opacity distance
-  outlineWidth: 0.08,
+  fontSize: 0.55,
+  nearDistance: 30,         // full opacity distance
+  farDistance: 80,          // zero opacity distance
+  outlineWidth: 0.1,
   outlineColor: '#071520',
 };
 

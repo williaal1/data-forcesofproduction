@@ -58,13 +58,14 @@ export function createFlows(scene, flowsData, sphereMeshes) {
     const opacity = FLOWS.minOpacity + normalizedValue * (FLOWS.maxOpacity - FLOWS.minOpacity);
 
     const material = new LineMaterial({
-      color: COLORS.mediumTeal,
+      color: COLORS.lightTeal,
       linewidth: lineWidth,
       transparent: true,
       opacity: opacity,
       dashed: true,
       dashSize: FLOWS.dashSize,
       gapSize: FLOWS.gapSize,
+      depthWrite: false,
       resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
     });
 
@@ -104,12 +105,12 @@ export function createFlows(scene, flowsData, sphereMeshes) {
       for (const line of lines) {
         const connected = line.userData.source === code || line.userData.target === code;
         line.material.opacity = connected
-          ? Math.max(line.material.opacity, 0.5)
-          : 0.03;
+          ? Math.max(line.material.opacity, 0.6)
+          : 0.02;
         if (connected) {
           line.material.color.set(COLORS.mint);
         } else {
-          line.material.color.set(COLORS.mediumTeal);
+          line.material.color.set(COLORS.darkTeal);
         }
       }
     },
@@ -118,7 +119,7 @@ export function createFlows(scene, flowsData, sphereMeshes) {
       for (const line of lines) {
         const normalizedValue = line.userData.value / maxFlow;
         line.material.opacity = FLOWS.minOpacity + normalizedValue * (FLOWS.maxOpacity - FLOWS.minOpacity);
-        line.material.color.set(COLORS.mediumTeal);
+        line.material.color.set(COLORS.lightTeal);
       }
     },
     // Rebuild positions after layout changes
