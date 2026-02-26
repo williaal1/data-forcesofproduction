@@ -130,6 +130,9 @@ async function main() {
     animate();
     console.log('IO Economy Visualization initialized');
 
+    // Expose references for screenshot pipeline
+    window.__viz = { camera, controls, scene, renderer, sphereSystem, flowSystem };
+
   } catch (err) {
     console.error('Initialization failed:', err);
     loadingText.textContent = `ERROR: ${err.message}`;

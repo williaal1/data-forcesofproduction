@@ -1,119 +1,120 @@
 // =============================================================================
 // config.js — Colors, scales, constants
-// GPC aesthetic: light theme, solid spheres, dark connecting lines
+// Molecular dark theme: floating structure, glossy nodes, visible bonds
 // =============================================================================
 
-// GPC / Common Wealth brand palette
+// Dark molecular palette
 export const COLORS = {
-  background: 0xf5f5f0,       // warm cream
-  gridColor: 0xd8d8d0,
-  gridCenterColor: 0xbbbbb0,
-  fogColor: 0xf5f5f0,
+  background: 0x0a0a1a,       // deep void
+  gridColor: 0x222233,
+  gridCenterColor: 0x333344,
+  fogColor: 0x0a0a1a,
 
-  // Node colors (GPC style)
+  // Node colors
   mint: 0x00c0a3,             // growing / green
   orange: 0xf19953,           // services / warm
   coral: 0xfd676a,            // declining / red
-  charcoal: 0x333333,         // dark nodes / neutral
-  darkTeal: 0x0c425b,
-  mediumTeal: 0x105c7e,
+  charcoal: 0x555566,         // neutral on dark bg
+  darkTeal: 0x1a8caa,         // brighter for dark bg
+  mediumTeal: 0x2ab0d4,
   lightTeal: 0xc9e9f8,
 
-  // Flow lines
-  flowColor: 0x333333,        // charcoal connections
+  // Flow bonds
+  flowColor: 0x6677aa,        // steel blue bonds
   flowHighlight: 0x00c0a3,    // highlighted connections
 
   // Trade shell
   tradeColor: 0xf19953,
 
   // Hex strings for CSS / troika
-  backgroundHex: '#f5f5f0',
-  charcoalHex: '#333333',
+  backgroundHex: '#0a0a1a',
+  charcoalHex: '#aaaabb',
   mintHex: '#00c0a3',
   coralHex: '#fd676a',
   orangeHex: '#f19953',
-  darkTealHex: '#0c425b',
-  mediumGrayHex: '#777777',
+  darkTealHex: '#1a8caa',
+  mediumGrayHex: '#888899',
 };
 
-// IP growth → color mapping (diverging)
-// Coral (#fd676a) → charcoal (#555) → mint (#00c0a3)
+// IP growth → color mapping (diverging) — brighter for dark bg
+// Coral → neutral → mint
 export const IP_COLOR_STOPS = [
   { value: -10, color: [0.99, 0.40, 0.42] },   // coral
-  { value: 0,   color: [0.33, 0.33, 0.33] },    // charcoal neutral
-  { value: 10,  color: [0.00, 0.75, 0.64] },     // mint
+  { value: 0,   color: [0.45, 0.45, 0.55] },    // muted blue-gray
+  { value: 10,  color: [0.00, 0.75, 0.64] },    // mint
 ];
 
-// Sectors without IP data get colored by type
+// Sectors without IP data get colored by type — brighter for dark bg
 export const SECTOR_TYPE_COLORS = {
-  manufacturing: 0x0c425b,    // dark teal
+  manufacturing: 0x1a8caa,    // bright teal
   services: 0xf19953,         // orange
-  government: 0x777777,       // gray
-  resources: 0x6f7c12,        // olive (GPC green)
+  government: 0x888899,       // light gray
+  resources: 0x8fa832,        // bright olive
 };
 
 // Scene parameters
 export const SCENE = {
-  cameraPosition: [0, 22, 55],
-  cameraTarget: [0, 14, 0],
-  fogNear: 120,
-  fogFar: 250,
-  bloomStrength: 0.0,         // no bloom for clean look
+  cameraPosition: [35, 20, 35],
+  cameraTarget: [0, 0, 0],
+  fogNear: 80,
+  fogFar: 200,
+  bloomStrength: 0.0,
   bloomRadius: 0,
   bloomThreshold: 1.0,
   gridSize: 100,
   gridDivisions: 30,
-  ambientIntensity: 0.7,
-  directionalIntensity: 0.6,
-  directionalPosition: [15, 40, 25],
-  hemisphereIntensity: 0.3,
+  ambientIntensity: 0.5,
+  directionalIntensity: 0.8,
+  directionalPosition: [20, 30, 15],
+  hemisphereIntensity: 0.25,
 };
 
 // Sphere parameters
 export const SPHERES = {
-  minRadius: 0.8,
-  maxRadius: 4.5,
-  geometryDetail: 32,         // SphereGeometry segments — smooth solid
-  upstreamnessScale: 6.0,
-  upstreamnessOffset: 1.0,
-  metalness: 0.05,
-  roughness: 0.7,
+  minRadius: 0.4,
+  maxRadius: 1.4,
+  geometryDetail: 32,
+  upstreamnessScale: 1.5,     // compressed for near-spherical structure
+  upstreamnessOffset: 0.0,    // centered around origin
+  metalness: 0.25,            // glossy molecular look
+  roughness: 0.4,
 };
 
-// Flow parameters
+// Flow parameters — visible bonds
 export const FLOWS = {
-  minTubeRadius: 0.02,
-  maxTubeRadius: 0.18,
-  minOpacity: 0.2,
-  maxOpacity: 0.7,
-  curveLift: 0.25,
+  minTubeRadius: 0.015,
+  maxTubeRadius: 0.09,
+  minOpacity: 0.1,            // dimmer weak bonds to reduce center noise
+  maxOpacity: 0.55,
+  curveLift: 0.05,
 };
 
-// Layout (d3-force-3d)
+// Layout — compact molecular structure
 export const LAYOUT = {
-  chargeStrength: -25,
-  linkDistance: 8,
-  linkStrength: 0.3,
-  centerStrength: 0.05,
-  warmupTicks: 300,
+  chargeStrength: -40,        // weaker repulsion (was -60, blew out outliers)
+  linkDistance: 4,
+  linkStrength: 0.5,
+  centerStrength: 0.8,        // very strong centering — tight geodesic
+  warmupTicks: 800,
+  yForceStrength: 0.02,
 };
 
 // Trade shell
 export const TRADE = {
-  hemisphereRadius: 50,
-  minCountryRadius: 0.5,
-  maxCountryRadius: 2.0,
-  connectionOpacity: 0.15,
+  hemisphereRadius: 40,
+  minCountryRadius: 0.4,
+  maxCountryRadius: 1.5,
+  connectionOpacity: 0.12,
 };
 
 // Labels
 export const LABELS = {
   fontSize: 0.5,
   nearDistance: 25,
-  farDistance: 70,
-  outlineWidth: 0.06,
-  outlineColor: '#f5f5f0',
-  color: '#333333',
+  farDistance: 55,
+  outlineWidth: 0.08,
+  outlineColor: '#0a0a1a',
+  color: '#ddddef',           // brighter labels
 };
 
 // Animation

@@ -1,6 +1,6 @@
 /* =============================================================================
    Forces of Production — 3D IO Economy Visualization
-   GPC aesthetic: light theme, clean institutional design
+   Dark molecular theme
    ============================================================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap');
@@ -8,17 +8,17 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg: #f5f5f0;
-  --bg-panel: rgba(255, 255, 255, 0.92);
-  --border: rgba(0, 0, 0, 0.1);
-  --text-primary: #333333;
-  --text-secondary: #777777;
-  --text-dim: rgba(0, 0, 0, 0.35);
+  --bg: #0a0a1a;
+  --bg-panel: rgba(15, 15, 30, 0.92);
+  --border: rgba(255, 255, 255, 0.1);
+  --text-primary: #ccccdd;
+  --text-secondary: #8888aa;
+  --text-dim: rgba(255, 255, 255, 0.3);
   --mint: #00c0a3;
   --coral: #fd676a;
   --orange: #f19953;
-  --dark-teal: #0c425b;
-  --olive: #6f7c12;
+  --dark-teal: #1a8caa;
+  --olive: #8fa832;
 }
 
 html, body {
@@ -35,7 +35,6 @@ html, body {
 }
 #canvas-container canvas { display: block; }
 
-/* No scanlines in light theme */
 #scanlines { display: none; }
 
 /* --- Branding --- */
@@ -43,7 +42,7 @@ html, body {
   position: fixed; top: 20px; left: 24px; z-index: 10;
   display: flex; flex-direction: column; gap: 2px;
 }
-#hud-logo { width: 36px; height: auto; opacity: 0.8; margin-bottom: 6px; }
+#hud-logo { width: 36px; height: auto; opacity: 0.7; margin-bottom: 6px; }
 #hud-title {
   font-weight: 700; font-size: 12px; letter-spacing: 3px;
   color: var(--dark-teal);
@@ -61,7 +60,8 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 6px; padding: 12px 16px;
   font-size: 10px; min-width: 170px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
 }
 .legend-title {
   font-weight: 600; letter-spacing: 2px;
@@ -69,7 +69,7 @@ html, body {
 }
 .legend-bar {
   height: 6px; border-radius: 3px;
-  background: linear-gradient(90deg, var(--coral), #555, var(--mint));
+  background: linear-gradient(90deg, var(--coral), #555566, var(--mint));
   margin-bottom: 4px;
 }
 .legend-labels {
@@ -97,7 +97,8 @@ html, body {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 6px; padding: 8px 8px 6px 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
 }
 #minimap-title {
   font-weight: 600; font-size: 8px; letter-spacing: 2px;
@@ -114,7 +115,8 @@ html, body {
   padding: 28px 24px; overflow-y: auto;
   transform: translateX(100%);
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: -4px 0 20px rgba(0,0,0,0.08);
+  box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
 }
 #info-panel.visible { transform: translateX(0); }
 #info-panel.hidden { transform: translateX(100%); }
@@ -142,7 +144,7 @@ html, body {
 #info-stats { margin-bottom: 20px; }
 .stat-row {
   display: flex; justify-content: space-between;
-  padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.06);
+  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 .stat-label { color: var(--text-secondary); font-size: 10px; }
 .stat-value {
@@ -159,11 +161,11 @@ html, body {
 }
 .conn-item {
   padding: 5px 8px; margin-bottom: 3px;
-  background: rgba(0,0,0,0.03); border-radius: 4px;
+  background: rgba(255,255,255,0.04); border-radius: 4px;
   cursor: pointer; display: flex; justify-content: space-between;
   align-items: center; font-size: 10px; transition: background 0.2s;
 }
-.conn-item:hover { background: rgba(0,0,0,0.07); }
+.conn-item:hover { background: rgba(255,255,255,0.08); }
 .conn-item .conn-name { color: var(--text-primary); }
 .conn-item .conn-value {
   font-family: 'JetBrains Mono', monospace;
@@ -195,7 +197,7 @@ html, body {
 }
 #loading-bar {
   width: 240px; height: 2px;
-  background: rgba(0,0,0,0.08); border-radius: 1px; overflow: hidden;
+  background: rgba(255,255,255,0.08); border-radius: 1px; overflow: hidden;
 }
 #loading-fill {
   height: 100%; width: 0%;

@@ -1,108 +1,134 @@
 // =============================================================================
-// layout.js — d3-force-3d X/Z placement (Y fixed by upstreamness)
+// layout.js — Self-contained 3D force-directed layout
+// No d3-force-3d dependency (CDN builds are broken for 3D)
+// Simple N^2 forces: charge repulsion + link attraction + centering + weak Y
 // =============================================================================
 
 import { LAYOUT } from './config.js';
 
-// Fallback layout: circular arrangement at each Y-level
-function fallbackLayout(spheres, flows) {
-  // Group by similar Y positions
-  const sorted = [...spheres].sort((a, b) => a.userData.targetY - b.userData.targetY);
-  const radius = 20;
-
-  for (let i = 0; i < sorted.length; i++) {
-    const angle = (i / sorted.length) * Math.PI * 2;
-    const r = radius * (0.5 + 0.5 * Math.random());
-    sorted[i].position.x = Math.cos(angle) * r;
-    sorted[i].position.z = Math.sin(angle) * r;
-  }
-}
-
 export async function applyLayout(spheres, sectors, flows) {
-  // Try loading d3-force-3d
-  let d3Force;
-  try {
-    // Try ESM import first
-    d3Force = await import('https://cdn.jsdelivr.net/npm/d3-force-3d@3.0.5/+esm');
-  } catch (e1) {
-    try {
-      // Fallback: load via script tag
-      await new Promise((resolve, reject) => {
-        if (window.d3) { resolve(); return; }
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/d3-force-3d@3.0.5/dist/d3-force-3d.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-      d3Force = window.d3;
-    } catch (e2) {
-      console.warn('d3-force-3d unavailable, using fallback layout');
-      fallbackLayout(spheres, flows);
-      return;
-    }
-  }
+  const N = sectors.length;
 
-  // Build nodes: index by sector code
+  // Build adjacency: code → index
   const codeToIndex = {};
-  const nodes = sectors.map((s, i) => {
-    codeToIndex[s.code] = i;
-    const mesh = spheres[i];
-    return {
-      index: i,
-      code: s.code,
-      x: (Math.random() - 0.5) * 20,
-      y: mesh.userData.targetY,
-      z: (Math.random() - 0.5) * 20,
-      fy: mesh.userData.targetY, // Fix Y
-    };
-  });
+  sectors.forEach((s, i) => { codeToIndex[s.code] = i; });
 
-  // Build links from flows
+  // Build link list (filter self-loops, missing codes)
   const links = flows
-    .filter(f => codeToIndex[f.source] !== undefined && codeToIndex[f.target] !== undefined)
+    .filter(f => {
+      const si = codeToIndex[f.source];
+      const ti = codeToIndex[f.target];
+      return si !== undefined && ti !== undefined && si !== ti;
+    })
     .map(f => ({
       source: codeToIndex[f.source],
       target: codeToIndex[f.target],
       value: f.value,
     }));
 
-  // Create simulation
-  const forceSimulation = d3Force.forceSimulation || d3Force.default?.forceSimulation;
-  const forceManyBody = d3Force.forceManyBody || d3Force.default?.forceManyBody;
-  const forceLink = d3Force.forceLink || d3Force.default?.forceLink;
-  const forceCenter = d3Force.forceCenter || d3Force.default?.forceCenter;
+  // Initialize node positions: Fibonacci sphere + slight upstreamness Y
+  const pos = new Float64Array(N * 3);
+  const vel = new Float64Array(N * 3);
+  const targetY = new Float64Array(N);
 
-  if (!forceSimulation) {
-    console.warn('d3-force-3d API not found, using fallback');
-    fallbackLayout(spheres, flows);
-    return;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < N; i++) {
+    const mesh = spheres[i];
+    const ty = mesh.userData.targetY;
+    targetY[i] = ty;
+
+    // Fibonacci sphere distribution for even initial spread
+    const t = i / (N - 1);
+    const phi = Math.acos(1 - 2 * t);
+    const theta = goldenAngle * i;
+    const r = 12;
+    pos[i*3]   = Math.sin(phi) * Math.cos(theta) * r;
+    pos[i*3+1] = Math.cos(phi) * r;
+    pos[i*3+2] = Math.sin(phi) * Math.sin(theta) * r;
   }
 
-  const simulation = forceSimulation(nodes)
-    .numDimensions(3)
-    .force('charge', forceManyBody().strength(LAYOUT.chargeStrength))
-    .force('link', forceLink(links)
-      .distance(d => LAYOUT.linkDistance / Math.max(d.value * 10, 0.1))
-      .strength(LAYOUT.linkStrength))
-    .force('center', forceCenter(0, 0, 0).strength(LAYOUT.centerStrength))
-    .stop();
+  const chargeStr = LAYOUT.chargeStrength;   // negative = repulsion
+  const linkDist = LAYOUT.linkDistance;
+  const linkStr = LAYOUT.linkStrength;
+  const centerStr = LAYOUT.centerStrength;
+  const yStr = LAYOUT.yForceStrength || 0.03;
+  const ticks = LAYOUT.warmupTicks;
+  const damping = 0.85;
+  const maxVelocity = 2.0;  // clamp per-axis velocity
 
-  // Run synchronous ticks
-  for (let i = 0; i < LAYOUT.warmupTicks; i++) {
-    simulation.tick();
-    // Re-fix Y after each tick (d3 may drift it)
-    for (const node of nodes) {
-      node.y = node.fy;
+  for (let tick = 0; tick < ticks; tick++) {
+    const alpha = Math.max(0.001, 1 - tick / ticks); // cooling schedule
+
+    // --- Many-body repulsion (Coulomb, N^2) ---
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const dx = pos[j*3]   - pos[i*3];
+        const dy = pos[j*3+1] - pos[i*3+1];
+        const dz = pos[j*3+2] - pos[i*3+2];
+        const distSq = dx*dx + dy*dy + dz*dz;
+        const dist = Math.sqrt(distSq + 1.0); // softening: +1.0 prevents explosion
+        // Repulsive force: F = charge * alpha / dist^2
+        const force = chargeStr * alpha / (dist * dist);
+        const fx = force * dx / dist;
+        const fy = force * dy / dist;
+        const fz = force * dz / dist;
+        vel[i*3]   += fx;  vel[i*3+1] += fy;  vel[i*3+2] += fz;
+        vel[j*3]   -= fx;  vel[j*3+1] -= fy;  vel[j*3+2] -= fz;
+      }
+    }
+
+    // --- Link attraction (spring) ---
+    for (const link of links) {
+      const si = link.source, ti = link.target;
+      const dx = pos[ti*3]   - pos[si*3];
+      const dy = pos[ti*3+1] - pos[si*3+1];
+      const dz = pos[ti*3+2] - pos[si*3+2];
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz + 0.01);
+      const td = Math.max(2, linkDist / Math.max(link.value * 5, 0.1));
+      const force = linkStr * (dist - td) * alpha / dist;
+      vel[si*3]   += force * dx;  vel[si*3+1] += force * dy;  vel[si*3+2] += force * dz;
+      vel[ti*3]   -= force * dx;  vel[ti*3+1] -= force * dy;  vel[ti*3+2] -= force * dz;
+    }
+
+    // --- Centering force ---
+    for (let i = 0; i < N; i++) {
+      vel[i*3]   -= pos[i*3]   * centerStr * alpha;
+      vel[i*3+1] -= pos[i*3+1] * centerStr * alpha;
+      vel[i*3+2] -= pos[i*3+2] * centerStr * alpha;
+    }
+
+    // --- Weak Y-force (upstreamness attractor) ---
+    for (let i = 0; i < N; i++) {
+      vel[i*3+1] += (targetY[i] - pos[i*3+1]) * yStr * alpha;
+    }
+
+    // --- Velocity clamping + integration + damping ---
+    for (let i = 0; i < N * 3; i++) {
+      vel[i] = Math.max(-maxVelocity, Math.min(maxVelocity, vel[i]));
+      pos[i] += vel[i];
+      vel[i] *= damping;
     }
   }
 
+  // Verify no NaN
+  let nanCount = 0;
+  for (let i = 0; i < N * 3; i++) {
+    if (isNaN(pos[i])) { nanCount++; pos[i] = 0; }
+  }
+  if (nanCount > 0) console.warn(`Layout: ${nanCount} NaN positions reset to 0`);
+
   // Apply positions to meshes
-  for (let i = 0; i < nodes.length; i++) {
-    spheres[i].position.x = nodes[i].x;
-    // Y already set correctly
-    spheres[i].position.z = nodes[i].z;
+  for (let i = 0; i < N; i++) {
+    spheres[i].position.x = pos[i*3];
+    spheres[i].position.y = pos[i*3+1];
+    spheres[i].position.z = pos[i*3+2];
+    spheres[i].userData.targetY = pos[i*3+1];
   }
 
-  console.log(`Layout: ${nodes.length} nodes, ${links.length} links, ${LAYOUT.warmupTicks} ticks`);
+  // Log spread info
+  const xs = Array.from({length: N}, (_, i) => pos[i*3]);
+  const ys = Array.from({length: N}, (_, i) => pos[i*3+1]);
+  const zs = Array.from({length: N}, (_, i) => pos[i*3+2]);
+  const rng = arr => (Math.max(...arr) - Math.min(...arr)).toFixed(1);
+  console.log(`Layout: ${N} nodes, ${links.length} links, ${ticks} ticks | spread X:${rng(xs)} Y:${rng(ys)} Z:${rng(zs)}`);
 }
