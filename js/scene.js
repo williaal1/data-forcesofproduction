@@ -1,12 +1,8 @@
 // =============================================================================
-// scene.js — Three.js scene, camera, bloom, grid floor, starfield
+// scene.js — Three.js scene: light theme, clean institutional look
 // =============================================================================
 
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { COLORS, SCENE } from './config.js';
 
 export function createScene(container) {
@@ -14,76 +10,69 @@ export function createScene(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
 
   // Scene
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(COLORS.void);
-  scene.fog = new THREE.Fog(COLORS.fogColor, SCENE.fogNear, SCENE.fogFar);
+  scene.background = new THREE.Color(COLORS.background);
+  scene.fog = new THREE.FogExp2(COLORS.fogColor, 0.006);
 
   // Camera
   const camera = new THREE.PerspectiveCamera(
     50,
     window.innerWidth / window.innerHeight,
     0.1,
-    300
+    400
   );
   camera.position.set(...SCENE.cameraPosition);
   camera.lookAt(new THREE.Vector3(...SCENE.cameraTarget));
 
-  // Bloom post-processing
-  const composer = new EffectComposer(renderer);
-  const renderPass = new RenderPass(scene, camera);
-  composer.addPass(renderPass);
-
-  const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
-    SCENE.bloomStrength,
-    SCENE.bloomRadius,
-    SCENE.bloomThreshold
-  );
-  composer.addPass(bloomPass);
-  composer.addPass(new OutputPass());
-
-  // Lighting
+  // Lighting — clean, even, for solid materials
   const ambient = new THREE.AmbientLight(0xffffff, SCENE.ambientIntensity);
   scene.add(ambient);
 
-  const pointLight = new THREE.PointLight(COLORS.lightTeal, SCENE.pointLightIntensity, 150);
-  pointLight.position.set(...SCENE.pointLightPosition);
-  scene.add(pointLight);
+  const dirLight = new THREE.DirectionalLight(0xffffff, SCENE.directionalIntensity);
+  dirLight.position.set(...SCENE.directionalPosition);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(1024, 1024);
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 100;
+  dirLight.shadow.camera.left = -50;
+  dirLight.shadow.camera.right = 50;
+  dirLight.shadow.camera.top = 50;
+  dirLight.shadow.camera.bottom = -50;
+  scene.add(dirLight);
 
-  // Grid floor (Battlezone ground = final demand surface at Y=0)
+  // Hemisphere light: warm from below, cool from above
+  const hemiLight = new THREE.HemisphereLight(0xddeeff, 0xf5f0e0, SCENE.hemisphereIntensity);
+  scene.add(hemiLight);
+
+  // Grid floor at Y=0 (final demand surface)
   const grid = new THREE.GridHelper(
     SCENE.gridSize,
     SCENE.gridDivisions,
     COLORS.gridCenterColor,
     COLORS.gridColor
   );
-  grid.material.opacity = 0.25;
+  grid.material.opacity = 0.3;
   grid.material.transparent = true;
   scene.add(grid);
 
-  // Starfield
-  const starGeo = new THREE.BufferGeometry();
-  const starPositions = new Float32Array(SCENE.starCount * 3);
-  for (let i = 0; i < SCENE.starCount; i++) {
-    starPositions[i * 3] = (Math.random() - 0.5) * SCENE.starSpread * 2;
-    starPositions[i * 3 + 1] = Math.random() * SCENE.starSpread;
-    starPositions[i * 3 + 2] = (Math.random() - 0.5) * SCENE.starSpread * 2;
-  }
-  starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-  const starMat = new THREE.PointsMaterial({
-    color: COLORS.starColor,
-    size: 0.15,
-    transparent: true,
-    opacity: 0.4,
-    sizeAttenuation: true,
+  // Subtle ground plane for depth perception
+  const groundGeo = new THREE.PlaneGeometry(200, 200);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: COLORS.background,
+    roughness: 1.0,
+    metalness: 0.0,
   });
-  const stars = new THREE.Points(starGeo, starMat);
-  scene.add(stars);
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.1;
+  ground.receiveShadow = true;
+  scene.add(ground);
 
   // Resize handler
   function onResize() {
@@ -92,10 +81,8 @@ export function createScene(container) {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
-    composer.setSize(w, h);
-    bloomPass.setSize(w, h);
   }
   window.addEventListener('resize', onResize);
 
-  return { renderer, scene, camera, composer, bloomPass };
+  return { renderer, scene, camera };
 }

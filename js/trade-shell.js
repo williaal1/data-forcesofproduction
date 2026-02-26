@@ -1,26 +1,18 @@
 // =============================================================================
-// trade-shell.js — Outer hemisphere of country spheres
+// trade-shell.js — Outer hemisphere of country spheres (solid, GPC style)
 // =============================================================================
 
 import * as THREE from 'three';
 import { TRADE, COLORS } from './config.js';
 
-// Fibonacci lattice on upper hemisphere
 function fibonacciHemisphere(n, radius) {
   const points = [];
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-
   for (let i = 0; i < n; i++) {
-    // y: 0 to 1 (upper hemisphere only)
-    const y = (i / (n - 1)) * 0.7 + 0.15; // avoid poles, range 0.15-0.85
+    const y = (i / (n - 1)) * 0.7 + 0.15;
     const r = Math.sqrt(1 - y * y) * radius;
     const theta = goldenAngle * i;
-
-    points.push(new THREE.Vector3(
-      Math.cos(theta) * r,
-      y * radius,
-      Math.sin(theta) * r
-    ));
+    points.push(new THREE.Vector3(Math.cos(theta) * r, y * radius, Math.sin(theta) * r));
   }
   return points;
 }
@@ -35,65 +27,47 @@ export function createTradeShell(scene, tradeData, sphereMeshes) {
   }
 
   const countries = tradeData.countries;
-  const n = countries.length;
-  const positions = fibonacciHemisphere(n, TRADE.hemisphereRadius);
+  const positions = fibonacciHemisphere(countries.length, TRADE.hemisphereRadius);
 
-  // Build code → mesh lookup for connections
   const codeToMesh = {};
-  for (const mesh of sphereMeshes) {
-    codeToMesh[mesh.userData.sectorCode] = mesh;
-  }
+  for (const mesh of sphereMeshes) codeToMesh[mesh.userData.sectorCode] = mesh;
 
   const maxImport = Math.max(...countries.map(c => c.imports_billions));
-  const geometry = new THREE.IcosahedronGeometry(1, TRADE.icosaDetail);
-  const countryMeshes = [];
+  const geometry = new THREE.SphereGeometry(1, 16, 16);
 
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < countries.length; i++) {
     const country = countries[i];
     const pos = positions[i];
-
-    // Size by import volume
     const sizeNorm = Math.sqrt(country.imports_billions / maxImport);
     const radius = TRADE.minCountryRadius + sizeNorm * (TRADE.maxCountryRadius - TRADE.minCountryRadius);
 
-    const material = new THREE.MeshBasicMaterial({
-      color: COLORS.orange,
-      wireframe: true,
+    const material = new THREE.MeshStandardMaterial({
+      color: COLORS.tradeColor,
+      metalness: 0.1,
+      roughness: 0.7,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.7,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.copy(pos);
     mesh.scale.set(radius, radius, radius);
-    mesh.userData = {
-      countryCode: country.code,
-      countryData: country,
-    };
-
+    mesh.userData = { countryCode: country.code, countryData: country };
     tradeGroup.add(mesh);
-    countryMeshes.push(mesh);
 
-    // Connection lines to primary domestic sectors
     if (country.sectors) {
       for (const sectorCode of country.sectors) {
         const sectorMesh = codeToMesh[sectorCode];
         if (!sectorMesh) continue;
 
-        const points = [pos, sectorMesh.position.clone()];
-        const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([pos, sectorMesh.position.clone()]);
         const lineMat = new THREE.LineBasicMaterial({
-          color: COLORS.orange,
+          color: COLORS.tradeColor,
           transparent: true,
           opacity: TRADE.connectionOpacity,
         });
         const line = new THREE.Line(lineGeo, lineMat);
-        line.userData = {
-          countryCode: country.code,
-          sectorCode: sectorCode,
-          sectorMesh: sectorMesh,
-          countryPos: pos,
-        };
+        line.userData = { countryCode: country.code, sectorCode, sectorMesh, countryPos: pos };
         tradeGroup.add(line);
       }
     }
@@ -103,9 +77,7 @@ export function createTradeShell(scene, tradeData, sphereMeshes) {
 
   return {
     group: tradeGroup,
-    countryMeshes,
     update() {
-      // Update connection lines to track sector positions (after layout)
       for (const child of tradeGroup.children) {
         if (child.isLine && child.userData.sectorMesh) {
           const positions = child.geometry.attributes.position;

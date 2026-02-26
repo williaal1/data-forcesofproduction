@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from 'three';
-import { SCENE, ANIMATION } from './config.js';
+import { SCENE } from './config.js';
 
 export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
   const raycaster = new THREE.Raycaster();
@@ -12,9 +12,17 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
   let selectedMesh = null;
 
   const canvas = document.querySelector('#canvas-container canvas');
-  if (!canvas) return { getSelected: () => null };
+  if (!canvas) return { getSelected: () => null, selectByCode: () => {} };
 
-  // Mouse move: hover highlight
+  function setHighlight(mesh, intensity) {
+    if (!mesh) return;
+    mesh.material.emissive = mesh.material.emissive || new THREE.Color(0x000000);
+    mesh.material.emissiveIntensity = intensity;
+    if (intensity > 0) {
+      mesh.material.emissive.set(0xffffff);
+    }
+  }
+
   canvas.addEventListener('mousemove', (e) => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -22,16 +30,15 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(sphereMeshes);
 
-    // Reset previous hover
     if (hoveredMesh && hoveredMesh !== selectedMesh) {
-      hoveredMesh.material.uniforms.uSelected.value = 0.0;
+      setHighlight(hoveredMesh, 0);
       canvas.style.cursor = 'default';
     }
 
     if (intersects.length > 0) {
       hoveredMesh = intersects[0].object;
       if (hoveredMesh !== selectedMesh) {
-        hoveredMesh.material.uniforms.uSelected.value = 0.3;
+        setHighlight(hoveredMesh, 0.15);
       }
       canvas.style.cursor = 'pointer';
     } else {
@@ -39,7 +46,6 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     }
   });
 
-  // Click: select
   canvas.addEventListener('click', (e) => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -48,31 +54,26 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     const intersects = raycaster.intersectObjects(sphereMeshes);
 
     if (intersects.length > 0) {
-      const mesh = intersects[0].object;
-      selectSector(mesh);
+      selectSector(intersects[0].object);
     }
   });
 
   function selectSector(mesh) {
-    // Deselect previous
     if (selectedMesh) {
-      selectedMesh.material.uniforms.uSelected.value = 0.0;
+      setHighlight(selectedMesh, 0);
+      selectedMesh.material.opacity = 0.92;
     }
 
     selectedMesh = mesh;
-    mesh.material.uniforms.uSelected.value = 1.0;
+    setHighlight(mesh, 0.3);
+    mesh.material.opacity = 1.0;
 
-    // Camera fly-to
     const target = mesh.position.clone();
-    const offset = new THREE.Vector3(8, 4, 12);
+    const offset = new THREE.Vector3(6, 3, 10);
     const newPos = target.clone().add(offset);
 
     if (controls && controls.setLookAt) {
-      controls.setLookAt(
-        newPos.x, newPos.y, newPos.z,
-        target.x, target.y, target.z,
-        true // enable transition
-      );
+      controls.setLookAt(newPos.x, newPos.y, newPos.z, target.x, target.y, target.z, true);
     } else {
       camera.position.copy(newPos);
       camera.lookAt(target);
@@ -83,37 +84,26 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     }
   }
 
-  // Select by code (for info panel navigation)
   function selectByCode(code) {
     const mesh = sphereMeshes.find(m => m.userData.sectorCode === code);
     if (mesh) selectSector(mesh);
   }
 
-  // Escape: return to overview
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (selectedMesh) {
-        selectedMesh.material.uniforms.uSelected.value = 0.0;
+        setHighlight(selectedMesh, 0);
+        selectedMesh.material.opacity = 0.92;
         selectedMesh = null;
       }
 
-      // Return to overview position
       if (controls && controls.setLookAt) {
-        controls.setLookAt(
-          ...SCENE.cameraPosition,
-          ...SCENE.cameraTarget,
-          true
-        );
+        controls.setLookAt(...SCENE.cameraPosition, ...SCENE.cameraTarget, true);
       }
 
-      if (callbacks.onDeselect) {
-        callbacks.onDeselect();
-      }
+      if (callbacks.onDeselect) callbacks.onDeselect();
     }
   });
 
-  return {
-    getSelected: () => selectedMesh,
-    selectByCode,
-  };
+  return { getSelected: () => selectedMesh, selectByCode };
 }

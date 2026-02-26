@@ -1,56 +1,55 @@
 // =============================================================================
-// spheres.js — Sector sphere creation with ShaderMaterial + wireframe
+// spheres.js — Solid sector spheres with MeshStandardMaterial
 // =============================================================================
 
 import * as THREE from 'three';
-import { COLORS, SPHERES, IP_COLOR_STOPS } from './config.js';
-import { sphereVertexShader } from './shaders/sphere-vertex.js';
-import { sphereFragmentShader } from './shaders/sphere-fragment.js';
+import { COLORS, SPHERES, IP_COLOR_STOPS, SECTOR_TYPE_COLORS } from './config.js';
 
 // Interpolate IP growth to RGB color
-function ipToColor(ipYoy) {
+function ipToColor(sector) {
+  const ipYoy = sector.ip_yoy;
+
+  // If no IP data, color by sector type
   if (ipYoy === null || ipYoy === undefined) {
-    return new THREE.Color(COLORS.mediumTeal); // neutral for missing
+    if (sector.is_manufacturing) return new THREE.Color(SECTOR_TYPE_COLORS.manufacturing);
+    const code = sector.code;
+    if (code.startsWith('G')) return new THREE.Color(SECTOR_TYPE_COLORS.government);
+    if (['111CA', '113FF', '211', '212', '213'].includes(code)) {
+      return new THREE.Color(SECTOR_TYPE_COLORS.resources);
+    }
+    return new THREE.Color(SECTOR_TYPE_COLORS.services);
   }
 
   const stops = IP_COLOR_STOPS;
+  if (ipYoy <= stops[0].value) return new THREE.Color(...stops[0].color);
+  if (ipYoy >= stops[2].value) return new THREE.Color(...stops[2].color);
+
   let t;
-  if (ipYoy <= stops[0].value) {
-    return new THREE.Color(...stops[0].color);
-  } else if (ipYoy >= stops[stops.length - 1].value) {
-    return new THREE.Color(...stops[stops.length - 1].color);
-  } else if (ipYoy <= stops[1].value) {
+  if (ipYoy <= stops[1].value) {
     t = (ipYoy - stops[0].value) / (stops[1].value - stops[0].value);
-    return new THREE.Color(
-      stops[0].color[0] + t * (stops[1].color[0] - stops[0].color[0]),
-      stops[0].color[1] + t * (stops[1].color[1] - stops[0].color[1]),
-      stops[0].color[2] + t * (stops[1].color[2] - stops[0].color[2])
+    return new THREE.Color().lerpColors(
+      new THREE.Color(...stops[0].color),
+      new THREE.Color(...stops[1].color),
+      t
     );
   } else {
     t = (ipYoy - stops[1].value) / (stops[2].value - stops[1].value);
-    return new THREE.Color(
-      stops[1].color[0] + t * (stops[2].color[0] - stops[1].color[0]),
-      stops[1].color[1] + t * (stops[2].color[1] - stops[1].color[1]),
-      stops[1].color[2] + t * (stops[2].color[2] - stops[1].color[2])
+    return new THREE.Color().lerpColors(
+      new THREE.Color(...stops[1].color),
+      new THREE.Color(...stops[2].color),
+      t
     );
   }
 }
 
-// Compute sphere radius from GDP share
 function gdpToRadius(gdpShare, maxGdpShare) {
   if (!gdpShare || !maxGdpShare) return SPHERES.minRadius;
   const normalized = Math.sqrt(gdpShare / maxGdpShare);
   return SPHERES.minRadius + normalized * (SPHERES.maxRadius - SPHERES.minRadius);
 }
 
-// Compute PPI intensity (0-1 normalized for shader)
-function ppiToIntensity(ppiYoy) {
-  if (ppiYoy === null || ppiYoy === undefined) return 0.05;
-  return Math.min(Math.abs(ppiYoy) / 15.0, 1.0); // scale: 15% = max jaggedness
-}
-
 export function createSpheres(scene, sectors) {
-  const geometry = new THREE.IcosahedronGeometry(1, SPHERES.icosaDetail);
+  const geometry = new THREE.SphereGeometry(1, SPHERES.geometryDetail, SPHERES.geometryDetail);
   const sphereGroup = new THREE.Group();
   sphereGroup.name = 'spheres';
 
@@ -58,42 +57,33 @@ export function createSpheres(scene, sectors) {
   const spheres = [];
 
   for (const sector of sectors) {
-    const color = ipToColor(sector.ip_yoy);
+    const color = ipToColor(sector);
     const radius = gdpToRadius(sector.gdp_share, maxGdpShare);
-    const ppiIntensity = ppiToIntensity(sector.ppi_yoy);
 
-    const material = new THREE.ShaderMaterial({
-      vertexShader: sphereVertexShader,
-      fragmentShader: sphereFragmentShader,
-      uniforms: {
-        uTime: { value: 0 },
-        uPpiIntensity: { value: ppiIntensity },
-        uBreathing: { value: 0.03 },
-        uScale: { value: radius },
-        uColor: { value: color },
-        uOpacity: { value: SPHERES.wireframeOpacity },
-        uSelected: { value: 0.0 },
-      },
-      wireframe: true,
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      metalness: SPHERES.metalness,
+      roughness: SPHERES.roughness,
       transparent: true,
-      depthWrite: true,
+      opacity: 0.92,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
 
-    // Y position from upstreamness (higher = more upstream)
+    // Y position from upstreamness
     const y = (sector.upstreamness || 1) * SPHERES.upstreamnessScale + SPHERES.upstreamnessOffset;
-    mesh.position.set(0, y, 0); // X/Z set by layout
+    mesh.position.set(0, y, 0);
 
-    // Store sector data on mesh for raycasting
     mesh.userData = {
       sectorCode: sector.code,
       sectorData: sector,
       baseRadius: radius,
       targetY: y,
+      baseColor: color.clone(),
     };
 
-    // Start invisible for materialization animation
+    // Start invisible for materialization
     mesh.scale.set(0, 0, 0);
 
     sphereGroup.add(mesh);
@@ -106,9 +96,19 @@ export function createSpheres(scene, sectors) {
     group: sphereGroup,
     meshes: spheres,
     update(time) {
+      // Gentle breathing
       for (const mesh of spheres) {
-        mesh.material.uniforms.uTime.value = time;
+        if (mesh.scale.x < 0.01) continue;
+        const r = mesh.userData.baseRadius;
+        const breath = 1.0 + Math.sin(time * Math.PI * 2 * 0.3) * 0.015;
+        const s = r * breath;
+        mesh.scale.set(s, s, s);
       }
+    },
+    // Set scale for animation (overrides breathing until materialized)
+    setScale(mesh, s) {
+      const r = mesh.userData.baseRadius;
+      mesh.scale.set(r * s, r * s, r * s);
     },
   };
 }

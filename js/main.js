@@ -15,7 +15,6 @@ import { setupInteraction } from './interaction.js';
 import { setupHUD } from './hud.js';
 import { createMinimap } from './minimap.js';
 
-// Loading progress
 const loadingFill = document.getElementById('loading-fill');
 const loadingScreen = document.getElementById('loading-screen');
 const loadingText = document.getElementById('loading-text');
@@ -27,17 +26,14 @@ function setLoadingProgress(pct, text) {
 
 async function main() {
   try {
-    // --- Load data ---
     setLoadingProgress(0, 'LOADING PRODUCTION MATRIX');
     const data = await loadData((p) => setLoadingProgress(p * 0.3));
 
     setLoadingProgress(0.3, 'INITIALIZING RENDERER');
-
-    // --- Create scene ---
     const container = document.getElementById('canvas-container');
-    const { renderer, scene, camera, composer } = createScene(container);
+    const { renderer, scene, camera } = createScene(container);
 
-    // --- Camera controls ---
+    // Camera controls
     setLoadingProgress(0.35, 'CONFIGURING CONTROLS');
     let controls;
     try {
@@ -51,7 +47,7 @@ async function main() {
       controls.minDistance = 5;
       controls.maxDistance = 150;
     } catch (e) {
-      console.warn('camera-controls unavailable, using OrbitControls fallback');
+      console.warn('camera-controls unavailable, using OrbitControls');
       const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
       controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(...SCENE.cameraTarget);
@@ -60,32 +56,25 @@ async function main() {
       controls.update();
     }
 
-    // --- Create spheres ---
     setLoadingProgress(0.4, 'GENERATING SECTOR GEOMETRY');
     const sphereSystem = createSpheres(scene, data.sectors);
 
-    // --- Force-directed layout ---
     setLoadingProgress(0.5, 'COMPUTING FORCE LAYOUT');
     await applyLayout(sphereSystem.meshes, data.sectors, data.flows);
 
-    // --- Create flows ---
     setLoadingProgress(0.65, 'TRACING INTER-INDUSTRY FLOWS');
     const flowSystem = createFlows(scene, data.flows, sphereSystem.meshes);
-    flowSystem.rebuild(); // Rebuild after layout
+    flowSystem.rebuild();
 
-    // --- Create labels ---
     setLoadingProgress(0.75, 'RENDERING LABELS');
     const labelSystem = await createLabels(scene, sphereSystem.meshes, data.sectors);
 
-    // --- Create trade shell ---
     setLoadingProgress(0.85, 'MAPPING TRADE ROUTES');
     const tradeSystem = createTradeShell(scene, data.trade, sphereSystem.meshes);
-    tradeSystem.update(); // Update connection lines after layout
+    tradeSystem.update();
 
-    // --- Setup HUD + Interaction (cross-wired) ---
+    // HUD + Interaction
     setLoadingProgress(0.9, 'INITIALIZING HUD');
-
-    // Use a deferred reference so HUD can call selectByCode before it's defined
     let selectByCodeRef = () => {};
     const hud = setupHUD(data.flows, (code) => selectByCodeRef(code));
     hud.setSectorLookup(data.sectors);
@@ -100,58 +89,42 @@ async function main() {
         flowSystem.resetHighlight();
       },
     });
-
-    // Now wire up the deferred reference
     selectByCodeRef = interaction.selectByCode;
 
-    // --- Setup minimap ---
+    // Minimap
     const minimap = createMinimap(camera, sphereSystem.meshes, data.sectors);
 
-    // --- Startup animation ---
+    // Startup
     setLoadingProgress(1.0, 'READY');
     await new Promise(r => setTimeout(r, 300));
-
-    // Fade out loading screen
     loadingScreen.classList.add('fade-out');
     setTimeout(() => loadingScreen.style.display = 'none', 800);
 
-    // Materialization: spheres appear bottom-up (downstream → upstream)
+    // Materialization: bottom-up
     const sortedByY = [...sphereSystem.meshes].sort(
       (a, b) => a.userData.targetY - b.userData.targetY
     );
-
-    const startTime = performance.now();
     for (let i = 0; i < sortedByY.length; i++) {
       const mesh = sortedByY[i];
-      const delay = i * ANIMATION.startupStagger;
-
-      setTimeout(() => {
-        animateScale(mesh, 0, 1, 600);
-      }, delay);
+      setTimeout(() => animateScale(mesh, 0, 1, 600), i * ANIMATION.startupStagger);
     }
 
-    // --- Render loop ---
+    // Render loop — direct rendering, no bloom
     const clock = new THREE.Clock();
 
     function animate() {
       requestAnimationFrame(animate);
-
       const delta = clock.getDelta();
       const elapsed = clock.getElapsedTime();
 
-      // Update camera controls
-      if (controls.update) {
-        controls.update(delta);
-      }
+      if (controls.update) controls.update(delta);
 
-      // Update systems
       sphereSystem.update(elapsed);
       flowSystem.update(elapsed);
       if (labelSystem) labelSystem.update(camera);
       minimap.update();
 
-      // Render with bloom
-      composer.render();
+      renderer.render(scene, camera);
     }
 
     animate();
@@ -164,22 +137,18 @@ async function main() {
   }
 }
 
-// Animate scale from → to with easing
 function animateScale(mesh, from, to, duration) {
   const startTime = performance.now();
+  const baseRadius = mesh.userData.baseRadius || 1;
 
   function step() {
     const t = Math.min((performance.now() - startTime) / duration, 1);
-    // Ease-out cubic
     const eased = 1 - Math.pow(1 - t, 3);
-    const scale = from + (to - from) * eased;
-    mesh.scale.set(scale, scale, scale);
-
+    const s = (from + (to - from) * eased) * baseRadius;
+    mesh.scale.set(s, s, s);
     if (t < 1) requestAnimationFrame(step);
   }
-
   step();
 }
 
-// Start
 main();

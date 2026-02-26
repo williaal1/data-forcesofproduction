@@ -1,19 +1,18 @@
 // =============================================================================
-// labels.js — troika-three-text sector labels (SDF rendering)
+// labels.js — troika-three-text sector labels (dark text, light theme)
 // =============================================================================
 
 import * as THREE from 'three';
-import { LABELS, COLORS } from './config.js';
+import { LABELS } from './config.js';
 
 let Text;
 
 export async function createLabels(scene, sphereMeshes, sectors) {
-  // Try loading troika-three-text
   try {
     const troika = await import('troika-three-text');
     Text = troika.Text;
   } catch (e) {
-    console.warn('troika-three-text unavailable, using sprite labels fallback');
+    console.warn('troika-three-text unavailable, using sprite labels');
     return createSpriteLabels(scene, sphereMeshes, sectors);
   }
 
@@ -31,17 +30,16 @@ export async function createLabels(scene, sphereMeshes, sectors) {
     const label = new Text();
     label.text = sector.short_name || sector.name || sector.code;
     label.fontSize = LABELS.fontSize;
-    label.color = COLORS.lightTealHex;
+    label.color = LABELS.color;
     label.outlineWidth = LABELS.outlineWidth;
     label.outlineColor = LABELS.outlineColor;
     label.anchorX = 'center';
     label.anchorY = 'bottom';
     label.depthOffset = -1;
 
-    // Position above sphere
     const radius = mesh.userData.baseRadius || 1;
     label.position.copy(mesh.position);
-    label.position.y += radius + 0.5;
+    label.position.y += radius + 0.6;
 
     label.userData = {
       sectorCode: mesh.userData.sectorCode,
@@ -62,16 +60,13 @@ export async function createLabels(scene, sphereMeshes, sectors) {
     labels,
     update(camera) {
       for (const label of labels) {
-        // Billboard: face camera
         label.quaternion.copy(camera.quaternion);
 
-        // Update position to track sphere
         const mesh = label.userData.parentMesh;
         const radius = mesh.userData.baseRadius || 1;
         label.position.copy(mesh.position);
-        label.position.y += radius + 0.5;
+        label.position.y += radius * mesh.scale.x / (mesh.userData.baseRadius || 1) + 0.6;
 
-        // Distance-based fade
         const dist = camera.position.distanceTo(label.position);
         if (dist < LABELS.nearDistance) {
           label.fillOpacity = 1.0;
@@ -81,14 +76,15 @@ export async function createLabels(scene, sphereMeshes, sectors) {
         } else {
           const t = (dist - LABELS.nearDistance) / (LABELS.farDistance - LABELS.nearDistance);
           label.fillOpacity = 1.0 - t;
-          label.text = label.userData.shortName;
+          label.text = dist < (LABELS.nearDistance + LABELS.farDistance) / 2
+            ? label.userData.fullName
+            : label.userData.shortName;
         }
       }
     },
   };
 }
 
-// Fallback: simple sprite labels
 function createSpriteLabels(scene, sphereMeshes, sectors) {
   const labelGroup = new THREE.Group();
   labelGroup.name = 'labels';
@@ -105,8 +101,8 @@ function createSpriteLabels(scene, sphereMeshes, sectors) {
     canvas.width = 256;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
-    ctx.font = '20px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#c9e9f8';
+    ctx.font = '18px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#333333';
     ctx.textAlign = 'center';
     ctx.fillText(sector.short_name || sector.code, 128, 40);
 
@@ -123,11 +119,7 @@ function createSpriteLabels(scene, sphereMeshes, sectors) {
     sprite.position.copy(mesh.position);
     sprite.position.y += radius + 0.8;
 
-    sprite.userData = {
-      sectorCode: mesh.userData.sectorCode,
-      parentMesh: mesh,
-    };
-
+    sprite.userData = { sectorCode: mesh.userData.sectorCode, parentMesh: mesh };
     labelGroup.add(sprite);
     labels.push(sprite);
   }
