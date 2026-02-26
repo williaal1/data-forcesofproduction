@@ -1,11 +1,9 @@
 // =============================================================================
-// flows.js — Inter-industry flow curves (dark lines, GPC style)
+// flows.js — Inter-industry flow tubes (solid 3D, GPC style)
+// Uses TubeGeometry (core Three.js) instead of Line2 addons
 // =============================================================================
 
 import * as THREE from 'three';
-import { Line2 } from 'three/addons/lines/Line2.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { FLOWS, COLORS } from './config.js';
 
 export function createFlows(scene, flowsData, sphereMeshes) {
@@ -17,10 +15,17 @@ export function createFlows(scene, flowsData, sphereMeshes) {
     codeToMesh[mesh.userData.sectorCode] = mesh;
   }
 
-  const maxFlow = Math.max(...flowsData.map(f => f.value));
-  const lines = [];
+  // Sort by value descending and take top flows for performance + clarity
+  const sortedFlows = [...flowsData].sort((a, b) => b.value - a.value);
+  const MAX_FLOWS = 300;
+  const displayFlows = sortedFlows.slice(0, MAX_FLOWS);
 
-  for (const flow of flowsData) {
+  const maxFlow = Math.max(...displayFlows.map(f => f.value));
+  const tubes = [];
+
+  console.log(`Creating ${displayFlows.length} flow tubes (of ${flowsData.length} total)`);
+
+  for (const flow of displayFlows) {
     const sourceMesh = codeToMesh[flow.source];
     const targetMesh = codeToMesh[flow.target];
     if (!sourceMesh || !targetMesh) continue;
@@ -28,81 +33,76 @@ export function createFlows(scene, flowsData, sphereMeshes) {
     const start = sourceMesh.position.clone();
     const end = targetMesh.position.clone();
 
+    // Arc midpoint — lift above straight line
     const mid = start.clone().add(end).multiplyScalar(0.5);
     const dist = start.distanceTo(end);
     mid.y += dist * FLOWS.curveLift;
 
+    // Slight lateral offset to reduce overlap
     const dir = end.clone().sub(start).normalize();
     const lateral = new THREE.Vector3(-dir.z, 0, dir.x);
     mid.add(lateral.multiplyScalar(dist * 0.05 * (Math.random() - 0.5)));
 
     const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-    const points = curve.getPoints(24);
-    const positions = [];
-    for (const p of points) positions.push(p.x, p.y, p.z);
 
-    const geometry = new LineGeometry();
-    geometry.setPositions(positions);
-
+    // Tube radius from flow value
     const normalizedValue = flow.value / maxFlow;
-    const lineWidth = FLOWS.minLineWidth + normalizedValue * (FLOWS.maxLineWidth - FLOWS.minLineWidth);
+    const tubeRadius = FLOWS.minTubeRadius + normalizedValue * (FLOWS.maxTubeRadius - FLOWS.minTubeRadius);
     const opacity = FLOWS.minOpacity + normalizedValue * (FLOWS.maxOpacity - FLOWS.minOpacity);
 
-    const material = new LineMaterial({
+    const geometry = new THREE.TubeGeometry(curve, 16, tubeRadius, 4, false);
+    const material = new THREE.MeshStandardMaterial({
       color: COLORS.flowColor,
-      linewidth: lineWidth,
       transparent: true,
       opacity: opacity,
-      depthTest: true,
+      roughness: 0.8,
+      metalness: 0.0,
       depthWrite: false,
-      resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
     });
 
-    const line = new Line2(geometry, material);
-    line.computeLineDistances();
-    line.renderOrder = 1; // render after opaque objects
-    line.userData = { source: flow.source, target: flow.target, value: flow.value };
+    const tube = new THREE.Mesh(geometry, material);
+    tube.renderOrder = 1;
+    tube.userData = {
+      source: flow.source,
+      target: flow.target,
+      value: flow.value,
+      normalizedValue,
+      baseOpacity: opacity,
+      baseTubeRadius: tubeRadius,
+    };
 
-    flowGroup.add(line);
-    lines.push(line);
+    flowGroup.add(tube);
+    tubes.push(tube);
   }
 
   scene.add(flowGroup);
-
-  window.addEventListener('resize', () => {
-    const res = new THREE.Vector2(window.innerWidth, window.innerHeight);
-    for (const line of lines) line.material.resolution = res;
-  });
+  console.log(`Flow tubes created: ${tubes.length}`);
 
   return {
     group: flowGroup,
-    lines,
+    lines: tubes,
     update() {},
     highlightSector(code) {
-      for (const line of lines) {
-        const connected = line.userData.source === code || line.userData.target === code;
+      for (const tube of tubes) {
+        const connected = tube.userData.source === code || tube.userData.target === code;
         if (connected) {
-          line.material.opacity = 0.6;
-          line.material.color.set(COLORS.flowHighlight);
-          line.material.linewidth = Math.max(line.material.linewidth, 3);
+          tube.material.opacity = 0.85;
+          tube.material.color.set(COLORS.flowHighlight);
         } else {
-          line.material.opacity = 0.02;
-          line.material.color.set(COLORS.flowColor);
+          tube.material.opacity = 0.03;
         }
       }
     },
     resetHighlight() {
-      for (const line of lines) {
-        const normalizedValue = line.userData.value / maxFlow;
-        line.material.opacity = FLOWS.minOpacity + normalizedValue * (FLOWS.maxOpacity - FLOWS.minOpacity);
-        line.material.linewidth = FLOWS.minLineWidth + normalizedValue * (FLOWS.maxLineWidth - FLOWS.minLineWidth);
-        line.material.color.set(COLORS.flowColor);
+      for (const tube of tubes) {
+        tube.material.opacity = tube.userData.baseOpacity;
+        tube.material.color.set(COLORS.flowColor);
       }
     },
     rebuild() {
-      for (const line of lines) {
-        const sourceMesh = codeToMesh[line.userData.source];
-        const targetMesh = codeToMesh[line.userData.target];
+      for (const tube of tubes) {
+        const sourceMesh = codeToMesh[tube.userData.source];
+        const targetMesh = codeToMesh[tube.userData.target];
         if (!sourceMesh || !targetMesh) continue;
 
         const start = sourceMesh.position.clone();
@@ -112,12 +112,10 @@ export function createFlows(scene, flowsData, sphereMeshes) {
         mid.y += dist * FLOWS.curveLift;
 
         const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-        const points = curve.getPoints(24);
-        const positions = [];
-        for (const p of points) positions.push(p.x, p.y, p.z);
+        const newGeo = new THREE.TubeGeometry(curve, 16, tube.userData.baseTubeRadius, 4, false);
 
-        line.geometry.setPositions(positions);
-        line.computeLineDistances();
+        tube.geometry.dispose();
+        tube.geometry = newGeo;
       }
     },
   };

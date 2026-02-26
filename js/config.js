@@ -82,14 +82,11 @@ export const SPHERES = {
 
 // Flow parameters
 export const FLOWS = {
-  minLineWidth: 1.5,
-  maxLineWidth: 6.0,
-  minOpacity: 0.25,
-  maxOpacity: 0.8,
+  minTubeRadius: 0.02,
+  maxTubeRadius: 0.18,
+  minOpacity: 0.2,
+  maxOpacity: 0.7,
   curveLift: 0.25,
-  dashSize: 0.8,
-  gapSize: 0.5,
-  animationSpeed: 0.003,
 };
 
 // Layout (d3-force-3d)
