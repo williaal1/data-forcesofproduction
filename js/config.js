@@ -20,7 +20,7 @@ export const COLORS = {
   lightTeal: 0xc9e9f8,
 
   // Flow lines
-  flowColor: 0x555555,        // dark gray connections
+  flowColor: 0x333333,        // charcoal connections
   flowHighlight: 0x00c0a3,    // highlighted connections
 
   // Trade shell
@@ -71,22 +71,22 @@ export const SCENE = {
 
 // Sphere parameters
 export const SPHERES = {
-  minRadius: 0.4,
-  maxRadius: 3.0,
+  minRadius: 0.8,
+  maxRadius: 4.5,
   geometryDetail: 32,         // SphereGeometry segments — smooth solid
   upstreamnessScale: 6.0,
   upstreamnessOffset: 1.0,
-  metalness: 0.1,
-  roughness: 0.6,
+  metalness: 0.05,
+  roughness: 0.7,
 };
 
 // Flow parameters
 export const FLOWS = {
-  minLineWidth: 1.0,
-  maxLineWidth: 5.0,
-  minOpacity: 0.08,
-  maxOpacity: 0.5,
-  curveLift: 0.2,
+  minLineWidth: 1.5,
+  maxLineWidth: 6.0,
+  minOpacity: 0.25,
+  maxOpacity: 0.8,
+  curveLift: 0.25,
   dashSize: 0.8,
   gapSize: 0.5,
   animationSpeed: 0.003,

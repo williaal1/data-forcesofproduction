@@ -53,12 +53,14 @@ export function createFlows(scene, flowsData, sphereMeshes) {
       linewidth: lineWidth,
       transparent: true,
       opacity: opacity,
+      depthTest: true,
       depthWrite: false,
       resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
     });
 
     const line = new Line2(geometry, material);
     line.computeLineDistances();
+    line.renderOrder = 1; // render after opaque objects
     line.userData = { source: flow.source, target: flow.target, value: flow.value };
 
     flowGroup.add(line);
