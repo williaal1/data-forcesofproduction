@@ -13,6 +13,7 @@ import { createLabels } from './labels.js';
 import { createTradeShell } from './trade-shell.js';
 import { setupInteraction } from './interaction.js';
 import { setupHUD } from './hud.js';
+import { createMinimap } from './minimap.js';
 
 // Loading progress
 const loadingFill = document.getElementById('loading-fill');
@@ -103,6 +104,9 @@ async function main() {
     // Now wire up the deferred reference
     selectByCodeRef = interaction.selectByCode;
 
+    // --- Setup minimap ---
+    const minimap = createMinimap(camera, sphereSystem.meshes, data.sectors);
+
     // --- Startup animation ---
     setLoadingProgress(1.0, 'READY');
     await new Promise(r => setTimeout(r, 300));
@@ -144,6 +148,7 @@ async function main() {
       sphereSystem.update(elapsed);
       flowSystem.update(elapsed);
       if (labelSystem) labelSystem.update(camera);
+      minimap.update();
 
       // Render with bloom
       composer.render();

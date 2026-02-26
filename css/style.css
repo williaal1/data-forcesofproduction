@@ -194,6 +194,32 @@ html, body {
   font-style: italic;
 }
 
+/* --- HUD: Minimap --- */
+#minimap-container {
+  position: fixed;
+  top: 24px;
+  right: 28px;
+  z-index: 10;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: 4px;
+  padding: 8px 8px 6px 8px;
+}
+
+#minimap-title {
+  font-weight: 600;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+#minimap-canvas {
+  display: block;
+  border-radius: 2px;
+}
+
 /* --- HUD: Info Panel --- */
 #info-panel {
   position: fixed;
