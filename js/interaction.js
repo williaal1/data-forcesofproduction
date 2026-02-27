@@ -70,13 +70,7 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     setHighlight(mesh, 0.3);
     mesh.material.opacity = 1.0;
 
-    // Frame the 2D supply-chain diagram centered at origin
-    if (controls && controls.setLookAt) {
-      controls.setLookAt(0, 0, 25, 0, 0, 0, true);
-    } else {
-      camera.position.set(0, 0, 25);
-      camera.lookAt(new THREE.Vector3(0, 0, 0));
-    }
+    // Camera framing is handled by focus-layout.js (dynamic Z based on layout size)
 
     if (callbacks.onSelect) {
       callbacks.onSelect(mesh.userData.sectorCode, mesh.userData.sectorData);

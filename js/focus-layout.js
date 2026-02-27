@@ -1,39 +1,77 @@
 // =============================================================================
-// focus-layout.js — 2D supply chain diagram on sector selection
-// Suppliers above, customers below, with dollar-value labels on flow lines
+// focus-layout.js — GPC-style 2D supply chain diagram on sector selection
+// Flat circles with names inside, multi-row layout, value labels between rows
 // =============================================================================
 
 import * as THREE from 'three';
 
 const LERP_FACTOR = 0.08;
 const SETTLE_THRESHOLD = 0.05;
-const SUPPLIER_Y = 6;
-const CUSTOMER_Y = -6;
-const ROW_SPACING = 3.5;
-const MAX_CONNECTED = 8;
 const NORMAL_OPACITY = 0.92;
 
-// Colors for flow lines and labels
-const SUPPLIER_COLOR = 0x00c0a3;  // mint
-const CUSTOMER_COLOR = 0xf19953;  // orange
+// Layout constants
+const ROW_GAP = 5.5;        // vertical distance between rows
+const CIRCLE_SPACING = 4.0; // horizontal distance between circle centers
+const MAX_PER_ROW = 8;      // max circles per row
 
-export function createFocusLayout(sphereSystem, flowSystem, scene) {
+// Circle sizes (sprite scale in world units)
+const CIRCLE_SIZE = 3.2;
+const SELECTED_CIRCLE_SIZE = 3.6;
+
+// Color palettes by theme
+const PALETTE = {
+  light: {
+    supplierFill: '#c8ebe3',
+    supplierBorder: '#00c0a3',
+    customerFill: '#fce0c4',
+    customerBorder: '#f19953',
+    selectedFill: '#333333',
+    selectedBorder: '#222222',
+    circleText: '#222222',
+    selectedText: '#ffffff',
+    valueBg: '#f5f5f0',
+    secondary: '#777777',
+  },
+  dark: {
+    supplierFill: '#1a3d35',
+    supplierBorder: '#00c0a3',
+    customerFill: '#3d2a18',
+    customerBorder: '#f19953',
+    selectedFill: '#ddddee',
+    selectedBorder: '#aaaacc',
+    circleText: '#e0e0e8',
+    selectedText: '#111111',
+    valueBg: '#0a0a1a',
+    secondary: '#8888aa',
+  },
+};
+
+const SUPPLIER_COLOR_HEX = '#00c0a3';
+const CUSTOMER_COLOR_HEX = '#f19953';
+const SUPPLIER_COLOR = 0x00c0a3;
+const CUSTOMER_COLOR = 0xf19953;
+
+export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
   const savedPositions = new Map();
   const targetPositions = new Map();
   const targetOpacities = new Map();
   let isAnimating = false;
   let isFocused = false;
   let focusedCode = null;
-  let focusedFlowData = [];  // store flow info for creating lines/labels after settle
+  let focusedFlowData = [];
+  let layoutBounds = { minY: -5, maxY: 5 };
 
-  // Groups for focus-mode overlays
+  // Overlay groups
+  let focusCircleGroup = null;
   let focusFlowGroup = null;
   let focusLabelGroup = null;
-  let focusLabels = [];
-  let Text = null;  // troika Text constructor, loaded lazily
-  const troikaReady = import('troika-three-text').then(mod => {
-    Text = mod.Text;
-  }).catch(() => {});
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  function getThemePalette() {
+    const isDark = window.__currentTheme?.name === 'dark';
+    return isDark ? PALETTE.dark : PALETTE.light;
+  }
 
   function setSceneFloor(visible) {
     if (!scene) return;
@@ -44,37 +82,206 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
     }
   }
 
+  function setLabelsVisible(visible) {
+    if (!scene) return;
+    const labelGroup = scene.getObjectByName('labels');
+    if (labelGroup) labelGroup.visible = visible;
+  }
+
   function saveCurrentPositions() {
     for (const mesh of sphereSystem.meshes) {
       savedPositions.set(mesh.userData.sectorCode, mesh.position.clone());
     }
   }
 
-  // Arrange codes in a horizontal row centered on X=0
-  // Sorted by value: biggest at center, alternating left/right
-  function arrangeRow(codes, y) {
+  // ── Multi-row arrangement (balanced) ────────────────────────────────────
+
+  // Distribute codes evenly across rows instead of filling MAX_PER_ROW then overflow.
+  // E.g. 11 items → 6+5, not 10+1. 22 items → 8+7+7, not 10+10+2.
+  function arrangeMultiRow(codes, direction) {
     const positions = new Map();
-    const count = codes.length;
-    if (count === 0) return positions;
+    const n = codes.length;
+    if (n === 0) return positions;
 
-    if (count === 1) {
-      positions.set(codes[0], new THREE.Vector3(0, y, 0));
-      return positions;
-    }
+    // Compute number of rows needed, then distribute evenly
+    const numRows = Math.ceil(n / MAX_PER_ROW);
+    const basePerRow = Math.floor(n / numRows);
+    const extra = n % numRows; // first `extra` rows get basePerRow+1
 
-    for (let i = 0; i < count; i++) {
-      let slot;
-      if (i === 0) {
-        slot = 0;
-      } else if (i % 2 === 1) {
-        slot = Math.ceil(i / 2);
-      } else {
-        slot = -Math.ceil(i / 2);
+    let idx = 0;
+    for (let row = 0; row < numRows; row++) {
+      const rowCount = basePerRow + (row < extra ? 1 : 0);
+      const rowWidth = (rowCount - 1) * CIRCLE_SPACING;
+      const startX = -rowWidth / 2;
+      const y = direction * (row + 1) * ROW_GAP;
+
+      for (let col = 0; col < rowCount; col++) {
+        const x = startX + col * CIRCLE_SPACING;
+        positions.set(codes[idx], new THREE.Vector3(x, y, 0));
+        idx++;
       }
-      positions.set(codes[i], new THREE.Vector3(slot * ROW_SPACING, y, 0));
     }
+
     return positions;
   }
+
+  // ── Canvas drawing ──────────────────────────────────────────────────────
+
+  function makeCircleSprite(name, fillColor, borderColor, textColor, size) {
+    const res = 1024;
+    const canvas = document.createElement('canvas');
+    canvas.width = res;
+    canvas.height = res;
+    const ctx = canvas.getContext('2d');
+
+    const cx = res / 2;
+    const cy = res / 2;
+    const r = res * 0.46; // slightly larger circle within canvas
+
+    // Fill
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+
+    // Border
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = borderColor;
+    ctx.stroke();
+
+    // Text — proportional font for compactness, large sizes for readability
+    // At Z=25, a 3.2-unit sprite ≈ 119px on screen.
+    // Canvas 1024 → 119px = 8.6:1 ratio. So 180px canvas font ≈ 21px screen.
+    const maxTextWidth = r * 1.55;
+    const fontFamily = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+    // Always try two-line for names > 8 chars that have spaces
+    const useMultiLine = name.length > 8 && name.includes(' ');
+
+    if (useMultiLine) {
+      // Find best split point (closest to middle by pixel width)
+      const words = name.split(' ');
+      let bestSplit = 1;
+      let bestDiff = Infinity;
+      for (let s = 1; s < words.length; s++) {
+        const l1 = words.slice(0, s).join(' ').length;
+        const l2 = words.slice(s).join(' ').length;
+        const diff = Math.abs(l1 - l2);
+        if (diff < bestDiff) { bestDiff = diff; bestSplit = s; }
+      }
+      const line1 = words.slice(0, bestSplit).join(' ');
+      const line2 = words.slice(bestSplit).join(' ');
+
+      let fontSize = 160;
+      ctx.font = `700 ${fontSize}px ${fontFamily}`;
+      let w1 = ctx.measureText(line1).width;
+      let w2 = ctx.measureText(line2).width;
+      while (Math.max(w1, w2) > maxTextWidth && fontSize > 50) {
+        fontSize -= 4;
+        ctx.font = `700 ${fontSize}px ${fontFamily}`;
+        w1 = ctx.measureText(line1).width;
+        w2 = ctx.measureText(line2).width;
+      }
+
+      ctx.fillStyle = textColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const gap = fontSize * 1.2;
+      ctx.fillText(line1, cx, cy - gap / 2);
+      ctx.fillText(line2, cx, cy + gap / 2);
+    } else {
+      let fontSize = 200;
+      ctx.font = `700 ${fontSize}px ${fontFamily}`;
+      let metrics = ctx.measureText(name);
+      while (metrics.width > maxTextWidth && fontSize > 50) {
+        fontSize -= 4;
+        ctx.font = `700 ${fontSize}px ${fontFamily}`;
+        metrics = ctx.measureText(name);
+      }
+
+      ctx.fillStyle = textColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, cx, cy);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(size, size, 1);
+    sprite.renderOrder = 3;
+    return sprite;
+  }
+
+  function makeValueSprite(text, color) {
+    const canvas = document.createElement('canvas');
+    const w = 256;
+    const h = 64;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const pal = getThemePalette();
+
+    ctx.font = 'bold 28px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Outline for contrast against background
+    ctx.strokeStyle = pal.valueBg;
+    ctx.lineWidth = 5;
+    ctx.strokeText(text, w / 2, h / 2);
+
+    ctx.fillStyle = color;
+    ctx.fillText(text, w / 2, h / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(3.5, 0.45, 1);
+    sprite.renderOrder = 4;
+    return sprite;
+  }
+
+  function makeContextSprite(text, color) {
+    const canvas = document.createElement('canvas');
+    const w = 512;
+    const h = 64;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const pal = getThemePalette();
+
+    ctx.font = 'bold 22px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = pal.valueBg;
+    ctx.lineWidth = 4;
+    ctx.strokeText(text, w / 2, h / 2);
+    ctx.fillStyle = color;
+    ctx.fillText(text, w / 2, h / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(8, 0.45, 1);
+    sprite.renderOrder = 4;
+    return sprite;
+  }
+
+  // ── Value formatting ────────────────────────────────────────────────────
 
   function formatValue(coefficient) {
     const dollars = coefficient * 100;
@@ -83,16 +290,7 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
     return `$${dollars.toFixed(2)}`;
   }
 
-  function getThemeColors() {
-    const theme = window.__currentTheme;
-    if (theme) {
-      return {
-        labelOutline: theme.labels?.outlineColor || '#f5f5f0',
-        secondaryColor: theme.name === 'dark' ? '#8888aa' : '#777777',
-      };
-    }
-    return { labelOutline: '#f5f5f0', secondaryColor: '#777777' };
-  }
+  // ── Overlay creation (after settle) ─────────────────────────────────────
 
   function createFocusOverlays() {
     if (!scene) return;
@@ -103,11 +301,58 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
     );
     if (!selectedMesh) return;
 
-    const selectedPos = selectedMesh.position;
+    const pal = getThemePalette();
 
-    // --- Flow lines (synchronous) ---
+    // Hide sector labels and make all spheres invisible + zero-scale
+    // (opacity 0 alone isn't enough — spheres still write to depth buffer and occlude sprites)
+    setLabelsVisible(false);
+    for (const mesh of sphereSystem.meshes) {
+      mesh.material.opacity = 0;
+      mesh.scale.set(0, 0, 0);
+    }
+
+    // ── Circle sprites ──
+    focusCircleGroup = new THREE.Group();
+    focusCircleGroup.name = 'focus-circles';
+
+    // Selected sector circle
+    const selectedName = selectedMesh.userData.sectorData?.short_name
+      || selectedMesh.userData.sectorData?.name
+      || focusedCode;
+    const selectedCircle = makeCircleSprite(
+      selectedName, pal.selectedFill, pal.selectedBorder, pal.selectedText, SELECTED_CIRCLE_SIZE
+    );
+    selectedCircle.position.copy(selectedMesh.position);
+    selectedCircle.position.z = 0.1;
+    focusCircleGroup.add(selectedCircle);
+
+    // Connected sector circles
+    for (const fd of focusedFlowData) {
+      const connMesh = sphereSystem.meshes.find(
+        m => m.userData.sectorCode === fd.connectedCode
+      );
+      if (!connMesh) continue;
+
+      const name = connMesh.userData.sectorData?.short_name
+        || connMesh.userData.sectorData?.name
+        || fd.connectedCode;
+
+      const fillColor = fd.isSupplier ? pal.supplierFill : pal.customerFill;
+      const borderColor = fd.isSupplier ? pal.supplierBorder : pal.customerBorder;
+
+      const circle = makeCircleSprite(name, fillColor, borderColor, pal.circleText, CIRCLE_SIZE);
+      circle.position.copy(connMesh.position);
+      circle.position.z = 0.1;
+      focusCircleGroup.add(circle);
+    }
+
+    scene.add(focusCircleGroup);
+
+    // ── Flow lines ──
     focusFlowGroup = new THREE.Group();
     focusFlowGroup.name = 'focus-flows';
+
+    const selectedPos = selectedMesh.position;
 
     for (const fd of focusedFlowData) {
       const connMesh = sphereSystem.meshes.find(
@@ -117,65 +362,26 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
 
       const connPos = connMesh.position;
       const color = fd.isSupplier ? SUPPLIER_COLOR : CUSTOMER_COLOR;
-      const opacity = 0.4 + (fd.normalizedValue * 0.5);
+      const opacity = 0.15 + (fd.normalizedValue * 0.2);
 
       const points = [selectedPos.clone(), connPos.clone()];
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
       const material = new THREE.LineBasicMaterial({
         color,
         transparent: true,
-        opacity: Math.min(opacity, 0.9),
+        opacity: Math.min(opacity, 0.35),
         depthWrite: false,
       });
       const line = new THREE.Line(geometry, material);
-      line.renderOrder = 2;
+      line.renderOrder = 1;
       focusFlowGroup.add(line);
     }
 
     scene.add(focusFlowGroup);
 
-    // --- Value labels (async — troika may still be loading) ---
-    createValueLabels(selectedPos);
-  }
-
-  function makeSprite(text, color, scale) {
-    const canvas = document.createElement('canvas');
-    const w = 512;
-    const h = 64;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx2d = canvas.getContext('2d');
-    ctx2d.font = 'bold 28px "JetBrains Mono", monospace';
-    ctx2d.textAlign = 'center';
-    ctx2d.textBaseline = 'middle';
-    // Outline
-    ctx2d.strokeStyle = window.__currentTheme?.name === 'dark' ? '#0a0a1a' : '#f5f5f0';
-    ctx2d.lineWidth = 5;
-    ctx2d.strokeText(text, w / 2, h / 2);
-    // Fill
-    ctx2d.fillStyle = color;
-    ctx2d.fillText(text, w / 2, h / 2);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthWrite: false,
-    });
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(scale || 3.5, 0.45, 1);
-    return sprite;
-  }
-
-  async function createValueLabels(selectedPos) {
-    await troikaReady;
-    if (!isFocused) return;
-
-    const { labelOutline, secondaryColor } = getThemeColors();
-
+    // ── Value labels (between rows) ──
     focusLabelGroup = new THREE.Group();
     focusLabelGroup.name = 'focus-labels';
-    focusLabels = [];
 
     for (const fd of focusedFlowData) {
       const connMesh = sphereSystem.meshes.find(
@@ -183,84 +389,80 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
       );
       if (!connMesh) continue;
 
-      const mid = selectedPos.clone().add(connMesh.position).multiplyScalar(0.5);
-      mid.x += 0.8;
-      const color = fd.isSupplier ? '#00c0a3' : '#f19953';
+      const color = fd.isSupplier ? SUPPLIER_COLOR_HEX : CUSTOMER_COLOR_HEX;
       const valueText = formatValue(fd.value);
 
-      if (Text) {
-        const label = new Text();
-        label.text = valueText;
-        label.fontSize = 0.4;
-        label.color = color;
-        label.outlineWidth = 0.05;
-        label.outlineColor = labelOutline;
-        label.anchorX = 'left';
-        label.anchorY = 'middle';
-        label.depthOffset = -2;
-        label.position.copy(mid);
-        label.sync();
-        focusLabelGroup.add(label);
-        focusLabels.push(label);
-      } else {
-        const sprite = makeSprite(valueText, color);
-        sprite.position.copy(mid);
-        focusLabelGroup.add(sprite);
-      }
-    }
-
-    // Context label
-    const ctxText = '$ per $100 gross output';
-    if (Text) {
-      const ctx = new Text();
-      ctx.text = ctxText;
-      ctx.fontSize = 0.35;
-      ctx.color = secondaryColor;
-      ctx.outlineWidth = 0.04;
-      ctx.outlineColor = labelOutline;
-      ctx.anchorX = 'center';
-      ctx.anchorY = 'top';
-      ctx.depthOffset = -2;
-      ctx.position.set(0, CUSTOMER_Y - 3, 0);
-      ctx.sync();
-      focusLabelGroup.add(ctx);
-      focusLabels.push(ctx);
-    } else {
-      const sprite = makeSprite(ctxText, secondaryColor, 8);
-      sprite.position.set(0, CUSTOMER_Y - 3, 0);
+      const sprite = makeValueSprite(valueText, color);
+      // Position: same X as connected circle, offset toward center by fixed amount
+      // (midpoint strategy breaks in multi-row: row 2 midpoint lands on row 1)
+      const offsetTowardCenter = connMesh.position.y > 0
+        ? -ROW_GAP * 0.38    // below supplier circle
+        : ROW_GAP * 0.38;    // above customer circle
+      sprite.position.set(
+        connMesh.position.x,
+        connMesh.position.y + offsetTowardCenter,
+        0.2
+      );
       focusLabelGroup.add(sprite);
     }
+
+    // Context label below everything
+    const ctxSprite = makeContextSprite('$ per $100 gross output', pal.secondary);
+    ctxSprite.position.set(0, layoutBounds.minY - 3, 0.2);
+    focusLabelGroup.add(ctxSprite);
 
     scene.add(focusLabelGroup);
   }
 
   function removeFocusOverlays() {
-    if (focusFlowGroup) {
-      for (const child of focusFlowGroup.children) {
-        child.geometry?.dispose();
-        child.material?.dispose();
+    for (const groupRef of [focusCircleGroup, focusFlowGroup, focusLabelGroup]) {
+      if (groupRef) {
+        for (const child of groupRef.children) {
+          if (child.material?.map) child.material.map.dispose();
+          child.material?.dispose();
+          child.geometry?.dispose();
+        }
+        scene.remove(groupRef);
       }
-      scene.remove(focusFlowGroup);
-      focusFlowGroup = null;
     }
-
-    if (focusLabelGroup) {
-      for (const child of focusLabelGroup.children) {
-        if (child.dispose) child.dispose();
-      }
-      scene.remove(focusLabelGroup);
-      focusLabelGroup = null;
-      focusLabels = [];
-    }
+    focusCircleGroup = null;
+    focusFlowGroup = null;
+    focusLabelGroup = null;
   }
+
+  // ── Camera framing ──────────────────────────────────────────────────────
+
+  function frameFocusLayout() {
+    if (!controls || !controls.setLookAt) return;
+
+    const totalHeight = layoutBounds.maxY - layoutBounds.minY + 8; // margin for circles + labels
+    const totalWidth = (MAX_PER_ROW - 1) * CIRCLE_SPACING + CIRCLE_SIZE + 4;
+
+    // Camera Z needed to see the full extent (assuming ~60deg FOV)
+    const aspect = window.innerWidth / window.innerHeight;
+    const fovRad = (60 * Math.PI) / 180;
+    const zForHeight = (totalHeight / 2) / Math.tan(fovRad / 2);
+    const zForWidth = (totalWidth / 2) / (aspect * Math.tan(fovRad / 2));
+    const cameraZ = Math.max(25, Math.max(zForHeight, zForWidth) + 5);
+
+    const centerY = (layoutBounds.maxY + layoutBounds.minY) / 2;
+    controls.setLookAt(0, centerY, cameraZ, 0, centerY, 0, true);
+  }
+
+  // ── Main API ────────────────────────────────────────────────────────────
 
   function focusOnSector(code, flowsData) {
     focusedCode = code;
-
-    // Remove any existing overlays (for sector-to-sector switching)
     removeFocusOverlays();
 
-    // Save positions on first focus
+    // Restore sphere scale if switching from a previous focus (spheres were zeroed)
+    for (const mesh of sphereSystem.meshes) {
+      if (mesh.scale.x === 0) {
+        const r = mesh.userData.baseRadius || 1;
+        mesh.scale.set(r, r, r);
+      }
+    }
+
     if (!isFocused) {
       saveCurrentPositions();
     }
@@ -271,26 +473,23 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
     );
     if (!selectedMesh) return;
 
-    // Compute connected sectors
+    // Compute ALL connected sectors (no limit)
     const supplierFlows = flowsData
       .filter(f => f.target === code && f.source !== code)
-      .sort((a, b) => b.value - a.value)
-      .slice(0, MAX_CONNECTED);
+      .sort((a, b) => b.value - a.value);
 
     const customerFlows = flowsData
       .filter(f => f.source === code && f.target !== code)
-      .sort((a, b) => b.value - a.value)
-      .slice(0, MAX_CONNECTED);
+      .sort((a, b) => b.value - a.value);
 
     const supplierCodes = supplierFlows.map(f => f.source);
     const customerCodes = customerFlows.map(f => f.target);
     const connectedSet = new Set([code, ...supplierCodes, ...customerCodes]);
 
-    // Compute max value for normalization
+    // Normalize values
     const allValues = [...supplierFlows, ...customerFlows].map(f => f.value);
     const maxVal = Math.max(...allValues, 0.001);
 
-    // Store flow data for overlay creation after settle
     focusedFlowData = [
       ...supplierFlows.map(f => ({
         connectedCode: f.source,
@@ -306,27 +505,35 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
       })),
     ];
 
-    // Compute target positions — flat 2D layout
+    // Compute target positions — multi-row layout
     targetPositions.clear();
     targetOpacities.clear();
 
     // Selected → center
     targetPositions.set(code, new THREE.Vector3(0, 0, 0));
-    targetOpacities.set(code, 1.0);
+    targetOpacities.set(code, NORMAL_OPACITY);
 
-    // Suppliers row above
-    const supplierPositions = arrangeRow(supplierCodes, SUPPLIER_Y);
+    // Suppliers above (direction +1)
+    const supplierPositions = arrangeMultiRow(supplierCodes, +1);
     for (const [c, pos] of supplierPositions) {
       targetPositions.set(c, pos);
       targetOpacities.set(c, NORMAL_OPACITY);
     }
 
-    // Customers row below
-    const customerPositions = arrangeRow(customerCodes, CUSTOMER_Y);
+    // Customers below (direction -1)
+    const customerPositions = arrangeMultiRow(customerCodes, -1);
     for (const [c, pos] of customerPositions) {
       targetPositions.set(c, pos);
       targetOpacities.set(c, NORMAL_OPACITY);
     }
+
+    // Compute layout bounds for camera
+    let minY = 0, maxY = 0;
+    for (const pos of targetPositions.values()) {
+      if (pos.y < minY) minY = pos.y;
+      if (pos.y > maxY) maxY = pos.y;
+    }
+    layoutBounds = { minY, maxY };
 
     // Unconnected → invisible, pushed far away
     for (const mesh of sphereSystem.meshes) {
@@ -341,6 +548,9 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
     isAnimating = true;
     flowSystem.group.visible = false;
     setSceneFloor(false);
+
+    // Frame the layout
+    frameFocusLayout();
   }
 
   function reset() {
@@ -348,6 +558,15 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
 
     removeFocusOverlays();
     focusedFlowData = [];
+
+    // Show labels again
+    setLabelsVisible(true);
+
+    // Restore sphere scale (was zeroed during focus to avoid depth buffer occlusion)
+    for (const mesh of sphereSystem.meshes) {
+      const r = mesh.userData.baseRadius || 1;
+      mesh.scale.set(r, r, r);
+    }
 
     targetPositions.clear();
     targetOpacities.clear();
@@ -368,13 +587,6 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
   }
 
   function update(delta, camera) {
-    // Billboard focus labels toward camera
-    if (focusLabels.length > 0 && camera) {
-      for (const label of focusLabels) {
-        label.quaternion.copy(camera.quaternion);
-      }
-    }
-
     if (!isAnimating) return;
 
     let maxDist = 0;
@@ -409,7 +621,6 @@ export function createFocusLayout(sphereSystem, flowSystem, scene) {
       isAnimating = false;
 
       if (isFocused && focusedCode) {
-        // Create focus overlays (custom lines + value labels)
         createFocusOverlays();
       } else {
         // Reset complete — restore global flows and floor

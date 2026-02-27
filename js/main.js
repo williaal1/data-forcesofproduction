@@ -76,7 +76,7 @@ async function main() {
     const hud = setupHUD(data.flows, (code) => selectByCodeRef(code));
     hud.setSectorLookup(data.sectors);
 
-    const focusLayout = createFocusLayout(sphereSystem, flowSystem, scene);
+    const focusLayout = createFocusLayout(sphereSystem, flowSystem, scene, controls);
 
     const interaction = setupInteraction(camera, sphereSystem.meshes, controls, {
       onSelect(code, sectorData) {
@@ -142,7 +142,7 @@ async function main() {
     console.log('IO Economy Visualization initialized');
 
     // Expose references for screenshot pipeline
-    window.__viz = { camera, controls, scene, renderer, sphereSystem, flowSystem, focusLayout, applyTheme: (name) => applyTheme(name, themeRefs) };
+    window.__viz = { camera, controls, scene, renderer, sphereSystem, flowSystem, focusLayout, flows: data.flows, applyTheme: (name) => applyTheme(name, themeRefs) };
 
   } catch (err) {
     console.error('Initialization failed:', err);
