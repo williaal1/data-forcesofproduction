@@ -6,6 +6,10 @@
 import * as THREE from 'three';
 import { FLOWS, COLORS } from './config.js';
 
+// Highlight colors: suppliers flowing IN vs customers flowing OUT
+const COLOR_SUPPLIER = 0x00c0a3;  // mint — input arriving
+const COLOR_CUSTOMER = 0xf19953;  // orange — output departing
+
 // Create a safe arc curve between two points with guaranteed non-collinear midpoint
 function makeCurve(start, end, curveLift, seed) {
   const mid = start.clone().add(end).multiplyScalar(0.5);
@@ -43,7 +47,7 @@ export function createFlows(scene, flowsData, sphereMeshes) {
 
   // Sort by value descending and take top flows for performance + clarity
   const sortedFlows = [...flowsData].sort((a, b) => b.value - a.value);
-  const MAX_FLOWS = 400; // top 400 flows — balance density vs readability
+  const MAX_FLOWS = FLOWS.maxFlows || 400;
   const displayFlows = sortedFlows.slice(0, MAX_FLOWS);
 
   const maxFlow = Math.max(...displayFlows.map(f => f.value));
@@ -67,9 +71,11 @@ export function createFlows(scene, flowsData, sphereMeshes) {
     const curve = makeCurve(start, end, FLOWS.curveLift, i);
     if (!curve) { skipped++; continue; }
 
+    // Power curve for perceptually clear size differentiation
     const normalizedValue = flow.value / maxFlow;
-    const tubeRadius = FLOWS.minTubeRadius + normalizedValue * (FLOWS.maxTubeRadius - FLOWS.minTubeRadius);
-    const opacity = FLOWS.minOpacity + normalizedValue * (FLOWS.maxOpacity - FLOWS.minOpacity);
+    const shaped = Math.pow(normalizedValue, FLOWS.powerCurve || 0.5);
+    const tubeRadius = FLOWS.minTubeRadius + shaped * (FLOWS.maxTubeRadius - FLOWS.minTubeRadius);
+    const opacity = FLOWS.minOpacity + shaped * (FLOWS.maxOpacity - FLOWS.minOpacity);
 
     try {
       const geometry = new THREE.TubeGeometry(curve, 16, tubeRadius, 4, false);
@@ -111,20 +117,25 @@ export function createFlows(scene, flowsData, sphereMeshes) {
     lines: tubes,
     update() {},
     highlightSector(code) {
+      // source→target means: source sells to target
+      // If source === selected: this sector is SELLING (customer flow, orange)
+      // If target === selected: this sector is BUYING (supplier flow, mint)
       for (const tube of tubes) {
-        const connected = tube.userData.source === code || tube.userData.target === code;
-        if (connected) {
+        const isSource = tube.userData.source === code;
+        const isTarget = tube.userData.target === code;
+        if (isSource || isTarget) {
           tube.material.opacity = 0.85;
-          tube.material.color.set(COLORS.flowHighlight);
+          tube.material.color.set(isTarget ? COLOR_SUPPLIER : COLOR_CUSTOMER);
         } else {
           tube.material.opacity = 0.03;
         }
       }
     },
     resetHighlight() {
+      const themeColor = (tubes[0]?.userData._themeFlowColor) || COLORS.flowColor;
       for (const tube of tubes) {
         tube.material.opacity = tube.userData.baseOpacity;
-        tube.material.color.set(COLORS.flowColor);
+        tube.material.color.set(tube.userData._themeFlowColor || themeColor);
       }
     },
     rebuild() {

@@ -92,7 +92,8 @@ export function setupHUD(flowsData, selectByCodeFn) {
 
       const item = document.createElement('div');
       item.className = 'conn-item';
-      item.innerHTML = `<span class="conn-name">${name}</span><span class="conn-value">${(conn.value * 100).toFixed(1)}%</span>`;
+      const dotColor = containerId === 'conn-suppliers' ? 'var(--mint)' : 'var(--orange)';
+      item.innerHTML = `<span class="conn-dot" style="background:${dotColor}"></span><span class="conn-name">${name}</span><span class="conn-value">${(conn.value * 100).toFixed(1)}%</span>`;
       item.addEventListener('click', () => {
         if (selectFn) selectFn(code);
       });

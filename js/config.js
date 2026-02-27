@@ -82,11 +82,13 @@ export const SPHERES = {
 
 // Flow parameters — charcoal bonds
 export const FLOWS = {
-  minTubeRadius: 0.015,
-  maxTubeRadius: 0.09,
-  minOpacity: 0.15,
-  maxOpacity: 0.6,
+  minTubeRadius: 0.008,
+  maxTubeRadius: 0.16,
+  minOpacity: 0.04,
+  maxOpacity: 0.5,
   curveLift: 0.05,
+  maxFlows: 300,
+  powerCurve: 0.35,
 };
 
 // Layout — compact molecular structure

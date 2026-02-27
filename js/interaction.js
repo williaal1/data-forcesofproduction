@@ -12,7 +12,7 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
   let selectedMesh = null;
 
   const canvas = document.querySelector('#canvas-container canvas');
-  if (!canvas) return { getSelected: () => null, selectByCode: () => {} };
+  if (!canvas) return { getSelected: () => null, selectByCode: () => {}, deselectSector: () => {} };
 
   function setHighlight(mesh, intensity) {
     if (!mesh) return;
@@ -55,6 +55,8 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
 
     if (intersects.length > 0) {
       selectSector(intersects[0].object);
+    } else if (selectedMesh) {
+      deselectSector();
     }
   });
 
@@ -69,7 +71,8 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     mesh.material.opacity = 1.0;
 
     const target = mesh.position.clone();
-    const offset = new THREE.Vector3(6, 3, 10);
+    // Frame the vertical supply-chain stack: look straight from front, enough distance for full span
+    const offset = new THREE.Vector3(0, 0, 25);
     const newPos = target.clone().add(offset);
 
     if (controls && controls.setLookAt) {
@@ -89,21 +92,25 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     if (mesh) selectSector(mesh);
   }
 
+  function deselectSector() {
+    if (selectedMesh) {
+      setHighlight(selectedMesh, 0);
+      selectedMesh.material.opacity = 0.92;
+      selectedMesh = null;
+    }
+
+    if (controls && controls.setLookAt) {
+      controls.setLookAt(...SCENE.cameraPosition, ...SCENE.cameraTarget, true);
+    }
+
+    if (callbacks.onDeselect) callbacks.onDeselect();
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (selectedMesh) {
-        setHighlight(selectedMesh, 0);
-        selectedMesh.material.opacity = 0.92;
-        selectedMesh = null;
-      }
-
-      if (controls && controls.setLookAt) {
-        controls.setLookAt(...SCENE.cameraPosition, ...SCENE.cameraTarget, true);
-      }
-
-      if (callbacks.onDeselect) callbacks.onDeselect();
+      deselectSector();
     }
   });
 
-  return { getSelected: () => selectedMesh, selectByCode };
+  return { getSelected: () => selectedMesh, selectByCode, deselectSector };
 }

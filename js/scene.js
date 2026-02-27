@@ -54,6 +54,7 @@ export function createScene(container) {
     COLORS.gridCenterColor,
     COLORS.gridColor
   );
+  grid.name = 'grid';
   grid.material.opacity = 0.3;
   grid.material.transparent = true;
   scene.add(grid);
@@ -68,6 +69,7 @@ export function createScene(container) {
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.1;
+  ground.name = 'ground';
   ground.receiveShadow = true;
   scene.add(ground);
 

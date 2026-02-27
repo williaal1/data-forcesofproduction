@@ -10,10 +10,11 @@ import { createSpheres } from './spheres.js';
 import { applyLayout } from './layout.js';
 import { createFlows } from './flows.js';
 import { createLabels } from './labels.js';
-import { createTradeShell } from './trade-shell.js';
 import { setupInteraction } from './interaction.js';
 import { setupHUD } from './hud.js';
 import { createMinimap } from './minimap.js';
+import { applyTheme, THEMES } from './theme.js';
+import { createFocusLayout } from './focus-layout.js';
 
 const loadingFill = document.getElementById('loading-fill');
 const loadingScreen = document.getElementById('loading-screen');
@@ -69,30 +70,39 @@ async function main() {
     setLoadingProgress(0.75, 'RENDERING LABELS');
     const labelSystem = await createLabels(scene, sphereSystem.meshes, data.sectors);
 
-    setLoadingProgress(0.85, 'MAPPING TRADE ROUTES');
-    const tradeSystem = createTradeShell(scene, data.trade, sphereSystem.meshes);
-    tradeSystem.update();
-
     // HUD + Interaction
     setLoadingProgress(0.9, 'INITIALIZING HUD');
     let selectByCodeRef = () => {};
     const hud = setupHUD(data.flows, (code) => selectByCodeRef(code));
     hud.setSectorLookup(data.sectors);
 
+    const focusLayout = createFocusLayout(sphereSystem, flowSystem);
+
     const interaction = setupInteraction(camera, sphereSystem.meshes, controls, {
       onSelect(code, sectorData) {
         hud.showPanel(code, sectorData);
-        flowSystem.highlightSector(code);
+        focusLayout.focusOnSector(code, data.flows);
       },
       onDeselect() {
         hud.hidePanel();
-        flowSystem.resetHighlight();
+        focusLayout.reset();
       },
     });
     selectByCodeRef = interaction.selectByCode;
 
     // Minimap
     const minimap = createMinimap(camera, sphereSystem.meshes, data.sectors);
+
+    // Theme toggle
+    const themeRefs = { scene, sphereSystem, flowSystem, labelSystem };
+    const savedTheme = localStorage.getItem('fop-theme') || 'light';
+    applyTheme(savedTheme, themeRefs);
+
+    document.getElementById('theme-toggle')?.addEventListener('click', () => {
+      const current = localStorage.getItem('fop-theme') || 'light';
+      const next = current === 'light' ? 'dark' : 'light';
+      applyTheme(next, themeRefs);
+    });
 
     // Startup
     setLoadingProgress(1.0, 'READY');
@@ -119,6 +129,7 @@ async function main() {
 
       if (controls.update) controls.update(delta);
 
+      focusLayout.update(delta);
       sphereSystem.update(elapsed);
       flowSystem.update(elapsed);
       if (labelSystem) labelSystem.update(camera);
@@ -131,7 +142,7 @@ async function main() {
     console.log('IO Economy Visualization initialized');
 
     // Expose references for screenshot pipeline
-    window.__viz = { camera, controls, scene, renderer, sphereSystem, flowSystem };
+    window.__viz = { camera, controls, scene, renderer, sphereSystem, flowSystem, focusLayout, applyTheme: (name) => applyTheme(name, themeRefs) };
 
   } catch (err) {
     console.error('Initialization failed:', err);

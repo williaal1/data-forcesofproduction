@@ -163,11 +163,43 @@ html, body {
   align-items: center; font-size: 10px; transition: background 0.2s;
 }
 .conn-item:hover { background: rgba(0,0,0,0.07); }
+.conn-dot {
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; flex-shrink: 0;
+}
 .conn-item .conn-name { color: var(--text-primary); }
 .conn-item .conn-value {
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-dim); font-size: 9px;
 }
+
+/* --- Theme toggle --- */
+#theme-toggle {
+  position: fixed; top: 20px; right: 24px; z-index: 11;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  transition: border-color 0.2s, color 0.2s, background 0.3s;
+}
+#theme-toggle:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+#theme-toggle svg {
+  width: 16px; height: 16px;
+}
+/* Light mode: show moon, hide sun */
+#theme-toggle[data-theme="light"] .icon-sun { display: none; }
+#theme-toggle[data-theme="light"] .icon-moon { display: block; }
+/* Dark mode: show sun, hide moon */
+#theme-toggle[data-theme="dark"] .icon-moon { display: none; }
+#theme-toggle[data-theme="dark"] .icon-sun { display: block; }
 
 /* --- Controls hint --- */
 #hud-controls {

@@ -1,5 +1,5 @@
 // =============================================================================
-// minimap.js — Side-view minimap (light theme)
+// minimap.js — Side-view minimap (theme-aware)
 // =============================================================================
 
 import * as THREE from 'three';
@@ -37,13 +37,36 @@ export function createMinimap(camera, sphereMeshes, sectors) {
   const frustum = new THREE.Frustum();
   const projScreenMatrix = new THREE.Matrix4();
 
+  // Fallback minimap colors if theme not yet applied
+  const fallback = {
+    background: '#ffffff',
+    border: 'rgba(0,0,0,0.1)',
+    tierLine: 'rgba(0,0,0,0.06)',
+    tierLabel: 'rgba(0,0,0,0.25)',
+    noDataDot: (inView) => `rgba(100, 100, 100, ${inView ? 0.7 : 0.3})`,
+    positiveDot: (inView) => `rgba(0, 192, 163, ${inView ? 0.9 : 0.35})`,
+    negativeDot: (inView) => `rgba(253, 103, 106, ${inView ? 0.9 : 0.35})`,
+    selectionStroke: '#333333',
+    cameraFill: 'rgba(12, 66, 91, 0.7)',
+    cameraStroke: '#0c425b',
+    fovFill: 'rgba(12, 66, 91, 0.05)',
+    fovStroke: 'rgba(12, 66, 91, 0.15)',
+    yAxisLabel: 'rgba(0,0,0,0.3)',
+  };
+
+  function getColors() {
+    return (window.__currentTheme && window.__currentTheme.minimap) || fallback;
+  }
+
   function update() {
+    const c = getColors();
+
     ctx.clearRect(0, 0, W, H);
 
-    // Light background
-    ctx.fillStyle = '#ffffff';
+    // Background
+    ctx.fillStyle = c.background;
     ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.strokeStyle = c.border;
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 0, W, H);
 
@@ -68,13 +91,13 @@ export function createMinimap(camera, sphereMeshes, sectors) {
     for (const tier of tiers) {
       const worldY = minY + tier.y * (maxY - minY);
       const [, my] = toMinimap(0, worldY);
-      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.strokeStyle = c.tierLine;
       ctx.lineWidth = 0.5;
       ctx.beginPath();
       ctx.moveTo(PAD, my);
       ctx.lineTo(W - PAD, my);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillStyle = c.tierLabel;
       ctx.fillText(tier.label, W - PAD + 1, my - 2);
     }
 
@@ -94,11 +117,11 @@ export function createMinimap(camera, sphereMeshes, sectors) {
       const ipYoy = sector ? sector.ip_yoy : null;
       let color;
       if (ipYoy === null || ipYoy === undefined) {
-        color = `rgba(100, 100, 100, ${inView ? 0.7 : 0.3})`;
+        color = c.noDataDot(inView);
       } else if (ipYoy > 0) {
-        color = `rgba(0, 192, 163, ${inView ? 0.9 : 0.35})`;
+        color = c.positiveDot(inView);
       } else {
-        color = `rgba(253, 103, 106, ${inView ? 0.9 : 0.35})`;
+        color = c.negativeDot(inView);
       }
 
       const isSelected = mesh.material.emissiveIntensity > 0.2;
@@ -109,7 +132,7 @@ export function createMinimap(camera, sphereMeshes, sectors) {
       ctx.fill();
 
       if (isSelected) {
-        ctx.strokeStyle = '#333';
+        ctx.strokeStyle = c.selectionStroke;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(mx, my, r + 3, 0, Math.PI * 2);
@@ -133,9 +156,9 @@ export function createMinimap(camera, sphereMeshes, sectors) {
     ctx.lineTo(-4, -3.5);
     ctx.lineTo(-4, 3.5);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(12, 66, 91, 0.7)';
+    ctx.fillStyle = c.cameraFill;
     ctx.fill();
-    ctx.strokeStyle = '#0c425b';
+    ctx.strokeStyle = c.cameraStroke;
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -147,9 +170,9 @@ export function createMinimap(camera, sphereMeshes, sectors) {
     ctx.lineTo(coneLen, -Math.tan(fovRad) * coneLen);
     ctx.lineTo(coneLen, Math.tan(fovRad) * coneLen);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(12, 66, 91, 0.05)';
+    ctx.fillStyle = c.fovFill;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(12, 66, 91, 0.15)';
+    ctx.strokeStyle = c.fovStroke;
     ctx.lineWidth = 0.5;
     ctx.stroke();
     ctx.restore();
@@ -157,7 +180,7 @@ export function createMinimap(camera, sphereMeshes, sectors) {
     // Y-axis label
     ctx.save();
     ctx.font = '7px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillStyle = c.yAxisLabel;
     ctx.textAlign = 'center';
     ctx.translate(7, H / 2);
     ctx.rotate(-Math.PI / 2);
