@@ -70,16 +70,12 @@ export function setupInteraction(camera, sphereMeshes, controls, callbacks) {
     setHighlight(mesh, 0.3);
     mesh.material.opacity = 1.0;
 
-    const target = mesh.position.clone();
-    // Frame the vertical supply-chain stack: look straight from front, enough distance for full span
-    const offset = new THREE.Vector3(0, 0, 25);
-    const newPos = target.clone().add(offset);
-
+    // Frame the 2D supply-chain diagram centered at origin
     if (controls && controls.setLookAt) {
-      controls.setLookAt(newPos.x, newPos.y, newPos.z, target.x, target.y, target.z, true);
+      controls.setLookAt(0, 0, 25, 0, 0, 0, true);
     } else {
-      camera.position.copy(newPos);
-      camera.lookAt(target);
+      camera.position.set(0, 0, 25);
+      camera.lookAt(new THREE.Vector3(0, 0, 0));
     }
 
     if (callbacks.onSelect) {

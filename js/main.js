@@ -76,7 +76,7 @@ async function main() {
     const hud = setupHUD(data.flows, (code) => selectByCodeRef(code));
     hud.setSectorLookup(data.sectors);
 
-    const focusLayout = createFocusLayout(sphereSystem, flowSystem);
+    const focusLayout = createFocusLayout(sphereSystem, flowSystem, scene);
 
     const interaction = setupInteraction(camera, sphereSystem.meshes, controls, {
       onSelect(code, sectorData) {
@@ -129,7 +129,7 @@ async function main() {
 
       if (controls.update) controls.update(delta);
 
-      focusLayout.update(delta);
+      focusLayout.update(delta, camera);
       sphereSystem.update(elapsed);
       flowSystem.update(elapsed);
       if (labelSystem) labelSystem.update(camera);

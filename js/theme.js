@@ -191,6 +191,17 @@ export function applyTheme(name, refs) {
     }
   }
 
+  // 6b. Focus labels (created dynamically by focus-layout.js)
+  const focusLabelGroup = scene.children.find(c => c.name === 'focus-labels');
+  if (focusLabelGroup) {
+    for (const label of focusLabelGroup.children) {
+      if (label.outlineColor !== undefined) {
+        label.outlineColor = theme.labels.outlineColor;
+      }
+      if (label.sync) label.sync();
+    }
+  }
+
   // 7. CSS custom properties
   const root = document.documentElement.style;
   for (const [prop, val] of Object.entries(theme.css)) {
