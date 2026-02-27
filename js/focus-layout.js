@@ -1,6 +1,6 @@
 // =============================================================================
 // focus-layout.js — GPC-style 2D supply chain diagram on sector selection
-// Flat circles with names inside, multi-row layout, value labels between rows
+// Flat circles with names + values inside, directional arrows, panel-aware camera
 // =============================================================================
 
 import * as THREE from 'three';
@@ -17,6 +17,11 @@ const MAX_PER_ROW = 8;      // max circles per row
 // Circle sizes (sprite scale in world units)
 const CIRCLE_SIZE = 3.2;
 const SELECTED_CIRCLE_SIZE = 3.6;
+
+// Arrow sizing
+const ARROW_HEAD_LENGTH = 0.8;
+const ARROW_MIN_SHAFT = 0.04;
+const ARROW_MAX_SHAFT = 0.22;
 
 // Color palettes by theme
 const PALETTE = {
@@ -96,17 +101,14 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
   // ── Multi-row arrangement (balanced) ────────────────────────────────────
 
-  // Distribute codes evenly across rows instead of filling MAX_PER_ROW then overflow.
-  // E.g. 11 items → 6+5, not 10+1. 22 items → 8+7+7, not 10+10+2.
   function arrangeMultiRow(codes, direction) {
     const positions = new Map();
     const n = codes.length;
     if (n === 0) return positions;
 
-    // Compute number of rows needed, then distribute evenly
     const numRows = Math.ceil(n / MAX_PER_ROW);
     const basePerRow = Math.floor(n / numRows);
-    const extra = n % numRows; // first `extra` rows get basePerRow+1
+    const extra = n % numRows;
 
     let idx = 0;
     for (let row = 0; row < numRows; row++) {
@@ -127,7 +129,7 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
   // ── Canvas drawing ──────────────────────────────────────────────────────
 
-  function makeCircleSprite(name, fillColor, borderColor, textColor, size) {
+  function makeCircleSprite(name, fillColor, borderColor, textColor, size, valueText, valueColor) {
     const res = 1024;
     const canvas = document.createElement('canvas');
     canvas.width = res;
@@ -136,7 +138,7 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
     const cx = res / 2;
     const cy = res / 2;
-    const r = res * 0.46; // slightly larger circle within canvas
+    const r = res * 0.46;
 
     // Fill
     ctx.beginPath();
@@ -149,60 +151,123 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
     ctx.strokeStyle = borderColor;
     ctx.stroke();
 
-    // Text — proportional font for compactness, large sizes for readability
-    // At Z=25, a 3.2-unit sprite ≈ 119px on screen.
-    // Canvas 1024 → 119px = 8.6:1 ratio. So 180px canvas font ≈ 21px screen.
+    // Text layout
     const maxTextWidth = r * 1.55;
     const fontFamily = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-
-    // Always try two-line for names > 8 chars that have spaces
+    const hasValue = valueText && valueColor;
     const useMultiLine = name.length > 8 && name.includes(' ');
 
-    if (useMultiLine) {
-      // Find best split point (closest to middle by pixel width)
-      const words = name.split(' ');
-      let bestSplit = 1;
-      let bestDiff = Infinity;
-      for (let s = 1; s < words.length; s++) {
-        const l1 = words.slice(0, s).join(' ').length;
-        const l2 = words.slice(s).join(' ').length;
-        const diff = Math.abs(l1 - l2);
-        if (diff < bestDiff) { bestDiff = diff; bestSplit = s; }
-      }
-      const line1 = words.slice(0, bestSplit).join(' ');
-      const line2 = words.slice(bestSplit).join(' ');
+    if (hasValue) {
+      // ── Name shifted up + value below ──
+      const nameYShift = -75;
 
-      let fontSize = 160;
-      ctx.font = `700 ${fontSize}px ${fontFamily}`;
-      let w1 = ctx.measureText(line1).width;
-      let w2 = ctx.measureText(line2).width;
-      while (Math.max(w1, w2) > maxTextWidth && fontSize > 50) {
-        fontSize -= 4;
+      if (useMultiLine) {
+        const words = name.split(' ');
+        let bestSplit = 1;
+        let bestDiff = Infinity;
+        for (let s = 1; s < words.length; s++) {
+          const l1 = words.slice(0, s).join(' ').length;
+          const l2 = words.slice(s).join(' ').length;
+          const diff = Math.abs(l1 - l2);
+          if (diff < bestDiff) { bestDiff = diff; bestSplit = s; }
+        }
+        const line1 = words.slice(0, bestSplit).join(' ');
+        const line2 = words.slice(bestSplit).join(' ');
+
+        let fontSize = 130;
         ctx.font = `700 ${fontSize}px ${fontFamily}`;
-        w1 = ctx.measureText(line1).width;
-        w2 = ctx.measureText(line2).width;
+        let w1 = ctx.measureText(line1).width;
+        let w2 = ctx.measureText(line2).width;
+        while (Math.max(w1, w2) > maxTextWidth && fontSize > 50) {
+          fontSize -= 4;
+          ctx.font = `700 ${fontSize}px ${fontFamily}`;
+          w1 = ctx.measureText(line1).width;
+          w2 = ctx.measureText(line2).width;
+        }
+
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const gap = fontSize * 1.15;
+        ctx.fillText(line1, cx, cy + nameYShift - gap / 2);
+        ctx.fillText(line2, cx, cy + nameYShift + gap / 2);
+      } else {
+        let fontSize = 170;
+        ctx.font = `700 ${fontSize}px ${fontFamily}`;
+        let metrics = ctx.measureText(name);
+        while (metrics.width > maxTextWidth && fontSize > 50) {
+          fontSize -= 4;
+          ctx.font = `700 ${fontSize}px ${fontFamily}`;
+          metrics = ctx.measureText(name);
+        }
+
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, cx, cy + nameYShift);
       }
 
-      ctx.fillStyle = textColor;
+      // Value text below center
+      let vfs = 110;
+      ctx.font = `600 ${vfs}px ${fontFamily}`;
+      let vMetrics = ctx.measureText(valueText);
+      while (vMetrics.width > maxTextWidth && vfs > 50) {
+        vfs -= 4;
+        ctx.font = `600 ${vfs}px ${fontFamily}`;
+        vMetrics = ctx.measureText(valueText);
+      }
+      ctx.fillStyle = valueColor;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const gap = fontSize * 1.2;
-      ctx.fillText(line1, cx, cy - gap / 2);
-      ctx.fillText(line2, cx, cy + gap / 2);
+      ctx.fillText(valueText, cx, cy + 110);
+
     } else {
-      let fontSize = 200;
-      ctx.font = `700 ${fontSize}px ${fontFamily}`;
-      let metrics = ctx.measureText(name);
-      while (metrics.width > maxTextWidth && fontSize > 50) {
-        fontSize -= 4;
-        ctx.font = `700 ${fontSize}px ${fontFamily}`;
-        metrics = ctx.measureText(name);
-      }
+      // ── Name only (selected circle / no value) ──
+      if (useMultiLine) {
+        const words = name.split(' ');
+        let bestSplit = 1;
+        let bestDiff = Infinity;
+        for (let s = 1; s < words.length; s++) {
+          const l1 = words.slice(0, s).join(' ').length;
+          const l2 = words.slice(s).join(' ').length;
+          const diff = Math.abs(l1 - l2);
+          if (diff < bestDiff) { bestDiff = diff; bestSplit = s; }
+        }
+        const line1 = words.slice(0, bestSplit).join(' ');
+        const line2 = words.slice(bestSplit).join(' ');
 
-      ctx.fillStyle = textColor;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(name, cx, cy);
+        let fontSize = 160;
+        ctx.font = `700 ${fontSize}px ${fontFamily}`;
+        let w1 = ctx.measureText(line1).width;
+        let w2 = ctx.measureText(line2).width;
+        while (Math.max(w1, w2) > maxTextWidth && fontSize > 50) {
+          fontSize -= 4;
+          ctx.font = `700 ${fontSize}px ${fontFamily}`;
+          w1 = ctx.measureText(line1).width;
+          w2 = ctx.measureText(line2).width;
+        }
+
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const gap = fontSize * 1.2;
+        ctx.fillText(line1, cx, cy - gap / 2);
+        ctx.fillText(line2, cx, cy + gap / 2);
+      } else {
+        let fontSize = 200;
+        ctx.font = `700 ${fontSize}px ${fontFamily}`;
+        let metrics = ctx.measureText(name);
+        while (metrics.width > maxTextWidth && fontSize > 50) {
+          fontSize -= 4;
+          ctx.font = `700 ${fontSize}px ${fontFamily}`;
+          metrics = ctx.measureText(name);
+        }
+
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, cx, cy);
+      }
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -215,39 +280,6 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(size, size, 1);
     sprite.renderOrder = 3;
-    return sprite;
-  }
-
-  function makeValueSprite(text, color) {
-    const canvas = document.createElement('canvas');
-    const w = 256;
-    const h = 64;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const pal = getThemePalette();
-
-    ctx.font = 'bold 28px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Outline for contrast against background
-    ctx.strokeStyle = pal.valueBg;
-    ctx.lineWidth = 5;
-    ctx.strokeText(text, w / 2, h / 2);
-
-    ctx.fillStyle = color;
-    ctx.fillText(text, w / 2, h / 2);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthWrite: false,
-    });
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(3.5, 0.45, 1);
-    sprite.renderOrder = 4;
     return sprite;
   }
 
@@ -290,6 +322,49 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
     return `$${dollars.toFixed(2)}`;
   }
 
+  // ── Arrow mesh construction ─────────────────────────────────────────────
+
+  function makeArrowMesh(fromPt, toPt, shaftWidth, headWidth, headLength, color, opacity) {
+    const dx = toPt.x - fromPt.x;
+    const dy = toPt.y - fromPt.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < headLength + 0.1) return null;
+
+    const dirX = dx / len;
+    const dirY = dy / len;
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    // Head base: where shaft ends and arrowhead begins
+    const hbX = toPt.x - dirX * headLength;
+    const hbY = toPt.y - dirY * headLength;
+
+    const sw2 = shaftWidth / 2;
+    const hw2 = headWidth / 2;
+
+    const shape = new THREE.Shape();
+    shape.moveTo(fromPt.x + perpX * sw2, fromPt.y + perpY * sw2);
+    shape.lineTo(hbX + perpX * sw2, hbY + perpY * sw2);
+    shape.lineTo(hbX + perpX * hw2, hbY + perpY * hw2);
+    shape.lineTo(toPt.x, toPt.y);
+    shape.lineTo(hbX - perpX * hw2, hbY - perpY * hw2);
+    shape.lineTo(hbX - perpX * sw2, hbY - perpY * sw2);
+    shape.lineTo(fromPt.x - perpX * sw2, fromPt.y - perpY * sw2);
+    shape.closePath();
+
+    const geometry = new THREE.ShapeGeometry(shape);
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 1;
+    return mesh;
+  }
+
   // ── Overlay creation (after settle) ─────────────────────────────────────
 
   function createFocusOverlays() {
@@ -303,19 +378,19 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
     const pal = getThemePalette();
 
-    // Hide sector labels and make all spheres invisible + zero-scale
-    // (opacity 0 alone isn't enough — spheres still write to depth buffer and occlude sprites)
+    // Hide sector labels and zero-scale all spheres (opacity 0 alone
+    // isn't enough — spheres still write to depth buffer and occlude sprites)
     setLabelsVisible(false);
     for (const mesh of sphereSystem.meshes) {
       mesh.material.opacity = 0;
       mesh.scale.set(0, 0, 0);
     }
 
-    // ── Circle sprites ──
+    // ── Circle sprites (values embedded inside connected circles) ──
     focusCircleGroup = new THREE.Group();
     focusCircleGroup.name = 'focus-circles';
 
-    // Selected sector circle
+    // Selected sector circle (name only, no value)
     const selectedName = selectedMesh.userData.sectorData?.short_name
       || selectedMesh.userData.sectorData?.name
       || focusedCode;
@@ -326,7 +401,7 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
     selectedCircle.position.z = 0.1;
     focusCircleGroup.add(selectedCircle);
 
-    // Connected sector circles
+    // Connected sector circles (with dollar values inside)
     for (const fd of focusedFlowData) {
       const connMesh = sphereSystem.meshes.find(
         m => m.userData.sectorCode === fd.connectedCode
@@ -339,8 +414,13 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
       const fillColor = fd.isSupplier ? pal.supplierFill : pal.customerFill;
       const borderColor = fd.isSupplier ? pal.supplierBorder : pal.customerBorder;
+      const valueColor = fd.isSupplier ? SUPPLIER_COLOR_HEX : CUSTOMER_COLOR_HEX;
+      const valueText = formatValue(fd.value);
 
-      const circle = makeCircleSprite(name, fillColor, borderColor, pal.circleText, CIRCLE_SIZE);
+      const circle = makeCircleSprite(
+        name, fillColor, borderColor, pal.circleText, CIRCLE_SIZE,
+        valueText, valueColor
+      );
       circle.position.copy(connMesh.position);
       circle.position.z = 0.1;
       focusCircleGroup.add(circle);
@@ -348,7 +428,7 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
     scene.add(focusCircleGroup);
 
-    // ── Flow lines ──
+    // ── Directional arrows (sized by flow value) ──
     focusFlowGroup = new THREE.Group();
     focusFlowGroup.name = 'focus-flows';
 
@@ -362,51 +442,58 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
       const connPos = connMesh.position;
       const color = fd.isSupplier ? SUPPLIER_COLOR : CUSTOMER_COLOR;
-      const opacity = 0.15 + (fd.normalizedValue * 0.2);
 
-      const points = [selectedPos.clone(), connPos.clone()];
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({
-        color,
-        transparent: true,
-        opacity: Math.min(opacity, 0.35),
-        depthWrite: false,
-      });
-      const line = new THREE.Line(geometry, material);
-      line.renderOrder = 1;
-      focusFlowGroup.add(line);
+      // Arrow sizing — shaft width and opacity scale with value
+      const shaftWidth = ARROW_MIN_SHAFT + fd.normalizedValue * (ARROW_MAX_SHAFT - ARROW_MIN_SHAFT);
+      const headWidth = shaftWidth * 3;
+      const opacity = 0.25 + fd.normalizedValue * 0.45;
+
+      // Direction: arrows point toward the buyer
+      //   Suppliers sell TO selected → arrow: supplier → selected
+      //   Selected sells TO customers → arrow: selected → customer
+      let fromCenter, toCenter, fromRadius, toRadius;
+      if (fd.isSupplier) {
+        fromCenter = connPos;
+        toCenter = selectedPos;
+        fromRadius = CIRCLE_SIZE / 2;
+        toRadius = SELECTED_CIRCLE_SIZE / 2;
+      } else {
+        fromCenter = selectedPos;
+        toCenter = connPos;
+        fromRadius = SELECTED_CIRCLE_SIZE / 2;
+        toRadius = CIRCLE_SIZE / 2;
+      }
+
+      // Offset start/end to circle edges
+      const dx = toCenter.x - fromCenter.x;
+      const dy = toCenter.y - fromCenter.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.01) continue;
+      const dirX = dx / dist;
+      const dirY = dy / dist;
+
+      const fromEdge = {
+        x: fromCenter.x + dirX * fromRadius,
+        y: fromCenter.y + dirY * fromRadius,
+      };
+      const toEdge = {
+        x: toCenter.x - dirX * toRadius,
+        y: toCenter.y - dirY * toRadius,
+      };
+
+      const arrow = makeArrowMesh(fromEdge, toEdge, shaftWidth, headWidth, ARROW_HEAD_LENGTH, color, opacity);
+      if (arrow) {
+        arrow.position.z = 0.05;
+        focusFlowGroup.add(arrow);
+      }
     }
 
     scene.add(focusFlowGroup);
 
-    // ── Value labels (between rows) ──
+    // ── Context label (values are now inside circles, only this remains) ──
     focusLabelGroup = new THREE.Group();
     focusLabelGroup.name = 'focus-labels';
 
-    for (const fd of focusedFlowData) {
-      const connMesh = sphereSystem.meshes.find(
-        m => m.userData.sectorCode === fd.connectedCode
-      );
-      if (!connMesh) continue;
-
-      const color = fd.isSupplier ? SUPPLIER_COLOR_HEX : CUSTOMER_COLOR_HEX;
-      const valueText = formatValue(fd.value);
-
-      const sprite = makeValueSprite(valueText, color);
-      // Position: same X as connected circle, offset toward center by fixed amount
-      // (midpoint strategy breaks in multi-row: row 2 midpoint lands on row 1)
-      const offsetTowardCenter = connMesh.position.y > 0
-        ? -ROW_GAP * 0.38    // below supplier circle
-        : ROW_GAP * 0.38;    // above customer circle
-      sprite.position.set(
-        connMesh.position.x,
-        connMesh.position.y + offsetTowardCenter,
-        0.2
-      );
-      focusLabelGroup.add(sprite);
-    }
-
-    // Context label below everything
     const ctxSprite = makeContextSprite('$ per $100 gross output', pal.secondary);
     ctxSprite.position.set(0, layoutBounds.minY - 3, 0.2);
     focusLabelGroup.add(ctxSprite);
@@ -430,15 +517,14 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
     focusLabelGroup = null;
   }
 
-  // ── Camera framing ──────────────────────────────────────────────────────
+  // ── Camera framing (offset for 340px right panel) ──────────────────────
 
   function frameFocusLayout() {
     if (!controls || !controls.setLookAt) return;
 
-    const totalHeight = layoutBounds.maxY - layoutBounds.minY + 8; // margin for circles + labels
+    const totalHeight = layoutBounds.maxY - layoutBounds.minY + 8;
     const totalWidth = (MAX_PER_ROW - 1) * CIRCLE_SPACING + CIRCLE_SIZE + 4;
 
-    // Camera Z needed to see the full extent (assuming ~60deg FOV)
     const aspect = window.innerWidth / window.innerHeight;
     const fovRad = (60 * Math.PI) / 180;
     const zForHeight = (totalHeight / 2) / Math.tan(fovRad / 2);
@@ -446,7 +532,14 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
     const cameraZ = Math.max(25, Math.max(zForHeight, zForWidth) + 5);
 
     const centerY = (layoutBounds.maxY + layoutBounds.minY) / 2;
-    controls.setLookAt(0, centerY, cameraZ, 0, centerY, 0, true);
+
+    // Shift camera left to account for right info panel (340px)
+    // Compute panel fraction of viewport, convert to world units at camera Z
+    const panelFraction = 340 / window.innerWidth;
+    const viewWorldHalfWidth = cameraZ * Math.tan(fovRad / 2) * aspect;
+    const panelOffset = viewWorldHalfWidth * panelFraction;
+
+    controls.setLookAt(-panelOffset, centerY, cameraZ, -panelOffset, centerY, 0, true);
   }
 
   // ── Main API ────────────────────────────────────────────────────────────
@@ -486,7 +579,7 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
     const customerCodes = customerFlows.map(f => f.target);
     const connectedSet = new Set([code, ...supplierCodes, ...customerCodes]);
 
-    // Normalize values
+    // Normalize values for arrow sizing
     const allValues = [...supplierFlows, ...customerFlows].map(f => f.value);
     const maxVal = Math.max(...allValues, 0.001);
 
