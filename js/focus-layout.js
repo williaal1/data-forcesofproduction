@@ -414,7 +414,7 @@ export function createFocusLayout(sphereSystem, flowSystem, scene, controls) {
 
       const fillColor = fd.isSupplier ? pal.supplierFill : pal.customerFill;
       const borderColor = fd.isSupplier ? pal.supplierBorder : pal.customerBorder;
-      const valueColor = fd.isSupplier ? SUPPLIER_COLOR_HEX : CUSTOMER_COLOR_HEX;
+      const valueColor = pal.circleText;
       const valueText = formatValue(fd.value);
 
       const circle = makeCircleSprite(
